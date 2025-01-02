@@ -129,3 +129,27 @@ build-runtime:
       changes:
         - runtime/**/*
         - .gitlab-ci.yml
+
+build-kos:
+  <<: *runner
+  stage: build-runtime
+  needs:
+    - build-cviwrapper
+    - build-servo
+  image: $TOOLCHAIN_IMAGE:latest
+  script:
+    - git clone https://github.com/kscalelabs/kos.git --depth 1 --branch zbot-dev
+    - cd kos
+    - rm -rf platforms/zeroth-01; ln -s $PWD/../runtime/kos_platform platforms/zeroth-01
+    - source /root/.cargo/env
+    - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
+
+  artifacts:
+    paths:
+      - kos/target/riscv64gc-unknown-linux-musl/release/kos
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+      changes:
+        - kos_platform/**/*
+        - .gitlab-ci.yml
