@@ -140,9 +140,9 @@ build-kos:
   script:
     - git clone https://github.com/kscalelabs/kos.git --depth 1 --branch zbot-dev
     - cd kos
-    - rm -rf platforms/zeroth-01; ln -s $PWD/runtime/kos_platform platforms/zeroth-01
+    - rm -rf platforms/zeroth-01; ln -s $PWD/../runtime/kos_platform platforms/zeroth-01
     - source /root/.cargo/env
-    - ls -lah platforms; ls -lah platforms/zeroth-01; ls -lah $PWD/runtime; ls -lah $PWD/runtime/kos_platform
+    - ls -lah platforms; ls -lah platforms/zeroth-01; ls -lah $PWD/../runtime; ls -lah $PWD/runtime/kos_platform
     - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
 
   artifacts:
