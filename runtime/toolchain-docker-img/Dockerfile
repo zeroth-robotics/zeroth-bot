@@ -5,7 +5,7 @@ RUN echo "Acquire::http::Pipeline-Depth 0;" > /etc/apt/apt.conf.d/99custom && \
     echo "Acquire::BrokenProxy    true;" >> /etc/apt/apt.conf.d/99custom
 
 RUN apt-get update && \
-    apt-get install -y git curl build-essential file bc bison  \
+    apt-get install -y bc git curl build-essential file bison  \
       build-essential flex libssl-dev unzip wget cpio rsync protobuf-compiler && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 
