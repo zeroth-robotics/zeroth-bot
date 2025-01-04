@@ -151,5 +151,5 @@ build-kos:
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
       changes:
-        - kos_platform/**/*
+        - runtime/kos_platform/**/*
         - .gitlab-ci.yml
