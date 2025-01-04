@@ -142,7 +142,7 @@ build-kos:
     - cd kos
     - rm -rf platforms/zeroth-01; ln -s $PWD/../runtime/kos_platform platforms/zeroth-01
     - source /root/.cargo/env
-    - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
+    - cargo +nightly build --target riscv64gc-unknown-linux-musl -F kos-zeroth-01 -Zbuild-std --release
 
   artifacts:
     paths:
