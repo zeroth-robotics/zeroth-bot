@@ -34,7 +34,9 @@ impl Platform for ZBotPlatform {
     }
 
     fn serial(&self) -> String {
-        "00000000".to_string()
+        std::fs::read_to_string("/tmp/mac1")
+            .map(|mac| mac.trim().replace(":", ""))
+            .unwrap_or_else(|_| "00000000".to_string())
     }
 
     fn initialize(&mut self, _operations_service: Arc<OperationsServiceImpl>) -> eyre::Result<()> {
