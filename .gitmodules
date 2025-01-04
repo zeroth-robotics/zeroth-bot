@@ -25,3 +25,6 @@
 [submodule "buildroot"]
 	path = buildroot
 	url = https://github.com/zeroth-robotics/buildroot
+[submodule "kos"]
+	path = kos
+	url = https://github.com/kscalelabs/kos.git
