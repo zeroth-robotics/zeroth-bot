@@ -4,14 +4,14 @@ mod firmware;
 pub use actuator::*;
 pub use firmware::*;
 
-use kos_core::{Platform, ServiceEnum};
-use tonic::async_trait;
-use std::sync::Arc;
-use kos_core::services::{ActuatorServiceImpl, OperationsServiceImpl};
 use kos_core::kos_proto::actuator::actuator_service_server::ActuatorServiceServer;
+use kos_core::services::{ActuatorServiceImpl, OperationsServiceImpl};
+use kos_core::{Platform, ServiceEnum};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
+use tonic::async_trait;
 
 pub struct ZBotPlatform {}
 
@@ -48,7 +48,7 @@ impl Platform for ZBotPlatform {
         Box::pin(async move {
             let actuator = ZBotActuator::new().await?;
             Ok(vec![ServiceEnum::Actuator(ActuatorServiceServer::new(
-                ActuatorServiceImpl::new(Arc::new(actuator))
+                ActuatorServiceImpl::new(Arc::new(actuator)),
             ))])
         })
     }

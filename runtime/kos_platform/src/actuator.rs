@@ -1,5 +1,6 @@
 use crate::firmware::hal::{ServoDirection, ServoMode, ServoRegister, TorqueMode};
 use crate::Servo;
+use eyre::Result;
 use kos_core::google_proto::longrunning::Operation;
 use kos_core::hal::Actuator;
 use kos_core::kos_proto::actuator::*;
@@ -7,7 +8,6 @@ use kos_core::kos_proto::common::{ActionResponse, ActionResult, Error as KosErro
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
-use eyre::Result;
 
 pub struct ZBotActuator {
     servo: Arc<Mutex<Servo>>,
@@ -25,12 +25,12 @@ impl ZBotActuator {
 
 #[tonic::async_trait]
 impl Actuator for ZBotActuator {
-    async fn command_actuators(
-        &self,
-        commands: Vec<ActuatorCommand>,
-    ) -> Result<Vec<ActionResult>> {
-        let servo = self.servo.lock().map_err(|_| Status::internal("Lock error"))?;
-        
+    async fn command_actuators(&self, commands: Vec<ActuatorCommand>) -> Result<Vec<ActionResult>> {
+        let servo = self
+            .servo
+            .lock()
+            .map_err(|_| Status::internal("Lock error"))?;
+
         let mut results = Vec::new();
         for cmd in commands {
             let result = if let Some(position) = cmd.position {
@@ -66,47 +66,71 @@ impl Actuator for ZBotActuator {
         Ok(results)
     }
 
-    async fn configure_actuator(
-        &self,
-        config: ConfigureActuatorRequest,
-    ) -> Result<ActionResponse> {
-        let servo = self.servo.lock().map_err(|_| Status::internal("Lock error"))?;
-        
+    async fn configure_actuator(&self, config: ConfigureActuatorRequest) -> Result<ActionResponse> {
+        let servo = self
+            .servo
+            .lock()
+            .map_err(|_| Status::internal("Lock error"))?;
+
         // Unlock EEPROM for writing
-        servo.write(config.actuator_id as u8, ServoRegister::LockMark, &[0])
+        servo
+            .write(config.actuator_id as u8, ServoRegister::LockMark, &[0])
             .map_err(|e| Status::internal(e.to_string()))?;
 
         let mut result = Ok(());
 
         // Apply configurations
         if let Some(kp) = config.kp {
-            result = result.and(servo.write(config.actuator_id as u8, ServoRegister::PProportionalCoeff, &[kp as u8]));
+            result = result.and(servo.write(
+                config.actuator_id as u8,
+                ServoRegister::PProportionalCoeff,
+                &[kp as u8],
+            ));
         }
         if let Some(ki) = config.ki {
-            result = result.and(servo.write(config.actuator_id as u8, ServoRegister::IIntegralCoeff, &[ki as u8]));
+            result = result.and(servo.write(
+                config.actuator_id as u8,
+                ServoRegister::IIntegralCoeff,
+                &[ki as u8],
+            ));
         }
         if let Some(kd) = config.kd {
-            result = result.and(servo.write(config.actuator_id as u8, ServoRegister::DDifferentialCoeff, &[kd as u8]));
+            result = result.and(servo.write(
+                config.actuator_id as u8,
+                ServoRegister::DDifferentialCoeff,
+                &[kd as u8],
+            ));
         }
         if let Some(torque_enabled) = config.torque_enabled {
-            let mode = if torque_enabled { TorqueMode::Enabled } else { TorqueMode::Disabled };
+            let mode = if torque_enabled {
+                TorqueMode::Enabled
+            } else {
+                TorqueMode::Disabled
+            };
             result = result.and(servo.set_torque_mode(config.actuator_id as u8, mode));
         }
 
         // Lock EEPROM after writing
-        servo.write(config.actuator_id as u8, ServoRegister::LockMark, &[1])
+        servo
+            .write(config.actuator_id as u8, ServoRegister::LockMark, &[1])
             .map_err(|e| Status::internal(e.to_string()))?;
 
         match result {
-            Ok(_) => Ok(ActionResponse { success: true, error: None }),
-            Err(e) => Ok(ActionResponse { success: false, error: Some(KosError { code: ErrorCode::HardwareFailure as i32, message: e.to_string() }) }),
+            Ok(_) => Ok(ActionResponse {
+                success: true,
+                error: None,
+            }),
+            Err(e) => Ok(ActionResponse {
+                success: false,
+                error: Some(KosError {
+                    code: ErrorCode::HardwareFailure as i32,
+                    message: e.to_string(),
+                }),
+            }),
         }
     }
 
-    async fn calibrate_actuator(
-        &self,
-        request: CalibrateActuatorRequest,
-    ) -> Result<Operation> {
+    async fn calibrate_actuator(&self, request: CalibrateActuatorRequest) -> Result<Operation> {
         Ok(Operation::default())
     }
 
@@ -114,8 +138,11 @@ impl Actuator for ZBotActuator {
         &self,
         actuator_ids: Vec<u32>,
     ) -> Result<Vec<ActuatorStateResponse>> {
-        let servo = self.servo.lock().map_err(|_| Status::internal("Lock error"))?;
-        
+        let servo = self
+            .servo
+            .lock()
+            .map_err(|_| Status::internal("Lock error"))?;
+
         let mut states = Vec::new();
         for id in actuator_ids {
             if let Ok(info) = servo.read_info(id as u8) {

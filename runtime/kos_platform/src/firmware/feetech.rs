@@ -1,8 +1,11 @@
+use crate::hal::{
+    MemoryLockState, ServoData, ServoDirection, ServoInfo, ServoMode, ServoMultipleWriteCommand,
+    ServoRegister, TorqueMode, MAX_SERVOS,
+};
 use eyre::Result;
-use std::os::raw::{c_int, c_short, c_uchar, c_ushort, c_uint};
-use crate::hal::{ServoInfo, ServoData, ServoMultipleWriteCommand, ServoMode, ServoDirection, ServoRegister, MemoryLockState, TorqueMode, MAX_SERVOS};
-use std::sync::{Arc, Mutex};
 use std::fmt;
+use std::os::raw::{c_int, c_short, c_uchar, c_uint, c_ushort};
+use std::sync::{Arc, Mutex};
 
 #[link(name = "sts3215")]
 extern "C" {
@@ -37,8 +40,16 @@ impl Servo {
     }
 
     pub fn write(&self, id: u8, register: ServoRegister, data: &[u8]) -> Result<()> {
-        let _result = unsafe { servo_write(id, register.clone() as u8, data.as_ptr(), data.len() as c_uchar) };
-        let result = unsafe { servo_write(id, register as u8, data.as_ptr(), data.len() as c_uchar) };
+        let _result = unsafe {
+            servo_write(
+                id,
+                register.clone() as u8,
+                data.as_ptr(),
+                data.len() as c_uchar,
+            )
+        };
+        let result =
+            unsafe { servo_write(id, register as u8, data.as_ptr(), data.len() as c_uchar) };
 
         if result != 0 {
             eyre::bail!("Failed to write to servo");
@@ -104,7 +115,11 @@ impl Servo {
     }
 
     pub fn set_speed(&self, id: u8, speed: u16, direction: ServoDirection) -> Result<()> {
-        let direction = if direction == ServoDirection::Clockwise { 1 } else { -1 };
+        let direction = if direction == ServoDirection::Clockwise {
+            1
+        } else {
+            -1
+        };
         let result = unsafe { set_servo_speed(id, speed, direction as i32) };
         if result != 0 {
             eyre::bail!("Failed to set servo speed");
@@ -188,7 +203,11 @@ impl Servo {
 
     pub fn set_pid(&self, id: u8, p: u8, i: u8, d: u8) -> Result<()> {
         // Unlock flash
-        self.write(id, ServoRegister::LockMark, &[MemoryLockState::Unlocked as u8])?;
+        self.write(
+            id,
+            ServoRegister::LockMark,
+            &[MemoryLockState::Unlocked as u8],
+        )?;
 
         // Set PID parameters
         self.write(id, ServoRegister::PProportionalCoeff, &[p])?;
@@ -196,7 +215,11 @@ impl Servo {
         self.write(id, ServoRegister::DDifferentialCoeff, &[d])?;
 
         // Lock flash
-        self.write(id, ServoRegister::LockMark, &[MemoryLockState::Locked as u8])?;
+        self.write(
+            id,
+            ServoRegister::LockMark,
+            &[MemoryLockState::Locked as u8],
+        )?;
 
         Ok(())
     }
@@ -206,8 +229,16 @@ impl Servo {
     }
 
     pub fn read_angle_limits(&self, id: u8) -> Result<(i16, i16)> {
-        let min_limit = i16::from_le_bytes(self.read(id, ServoRegister::MinAngleLimit, 2)?.try_into().unwrap());
-        let max_limit = i16::from_le_bytes(self.read(id, ServoRegister::MaxAngleLimit, 2)?.try_into().unwrap());
+        let min_limit = i16::from_le_bytes(
+            self.read(id, ServoRegister::MinAngleLimit, 2)?
+                .try_into()
+                .unwrap(),
+        );
+        let max_limit = i16::from_le_bytes(
+            self.read(id, ServoRegister::MaxAngleLimit, 2)?
+                .try_into()
+                .unwrap(),
+        );
         Ok((min_limit, max_limit))
     }
 
@@ -224,7 +255,7 @@ impl Servo {
         // Try to read the servo ID from memory address 0x5 (ServoRegister::ID)
         match self.read(id, ServoRegister::ID, 1) {
             Ok(data) if data.len() == 1 && data[0] == id => Ok(true),
-            Ok(_) => Ok(false), // Received data, but it doesn't match the ID
+            Ok(_) => Ok(false),  // Received data, but it doesn't match the ID
             Err(_) => Ok(false), // No response, assume no servo at this ID
         }
     }
@@ -232,10 +263,10 @@ impl Servo {
     pub fn degrees_to_raw(degrees: f32) -> u16 {
         // Ensure the input is within the valid range
         let clamped_degrees = degrees.max(-180.0).min(180.0);
-        
+
         // Convert degrees to raw value
         let raw = (clamped_degrees + 180.0) / 360.0 * 4096.0;
-        
+
         // Round to nearest integer and ensure it's within the valid range
         raw.round().max(0.0).min(4095.0) as u16
     }
@@ -243,10 +274,10 @@ impl Servo {
     pub fn raw_to_degrees(raw: u16) -> f32 {
         // Ensure the input is within the valid range
         let clamped_raw = raw.max(0).min(4095);
-        
+
         // Convert raw value to degrees
         let degrees = (clamped_raw as f32 / 4096.0) * 360.0 - 180.0;
-        
+
         // Round to two decimal places
         (degrees * 100.0).round() / 100.0;
 
