@@ -138,7 +138,7 @@ build-kos:
     - build-servo
   image: $TOOLCHAIN_IMAGE:latest
   script:
-    - git clone https://github.com/kscalelabs/kos.git --depth 1 --branch zbot-dev
+    - git clone https://github.com/kscalelabs/kos.git --depth 1
     - cd kos
     - rm -rf platforms/zeroth-01; ln -s $PWD/../runtime/kos_platform platforms/zeroth-01
     - source /root/.cargo/env
