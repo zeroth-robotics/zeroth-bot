@@ -3,8 +3,9 @@ mod feetech;
 pub use feetech::Servo;
 
 pub mod hal {
-    use serde::{Deserialize, Serialize};
-    use std::os::raw::{c_short, c_uchar, c_uint, c_ushort};
+    use std::os::raw::{c_short, c_uchar, c_ushort, c_uint};
+    use serde::{Serialize, Deserialize};
+
 
     pub const MAX_SERVOS: usize = 16;
 
