@@ -1,8 +1,9 @@
 use i2cdev::core::I2CDevice;
 use i2cdev::linux::LinuxI2CDevice;
-use std::error::Error;
+use std::error::Error as StdError;
 use std::thread;
 use std::time::Duration;
+use eyre::Result;
 
 const QMI8658_SLAVE_ADDR_L: u8 = 0x6a;
 const QMI8658_SLAVE_ADDR_H: u8 = 0x6b;
@@ -64,49 +65,59 @@ pub struct QMI8658 {
 }
 
 impl QMI8658 {
-    pub fn new(i2c_bus: &str) -> Result<Self, Box<dyn Error>> {
-        let mut i2c = LinuxI2CDevice::new(i2c_bus, QMI8658_SLAVE_ADDR_H as u16)?;
-        let chip_id = Self::read_reg(&mut i2c, Register::WhoAmI as u8)?;
-        let mut device = Self {
+    pub fn new(i2c_bus: &str) -> Result<Self> {
+        let mut i2c = LinuxI2CDevice::new(i2c_bus, QMI8658_SLAVE_ADDR_H as u16)
+            .map_err(|e| eyre::eyre!("Failed to create I2C device: {}", e))?;
+        let chip_id = Self::read_reg(&mut i2c, Register::WhoAmI as u8)
+            .map_err(|e| eyre::eyre!("Failed to read WHO_AM_I register: {}", e))?;
+        
+        Ok(Self {
             i2c,
             acc_lsb_div: 1 << 12, // Default 8g range
             gyro_lsb_div: 64,     // Default 512dps range
-        };
-
-        device.init()?;
-        Ok(device)
+        })
     }
 
-    fn init(&mut self) -> Result<(), Box<dyn Error>> {        
+    pub fn init(&mut self) -> Result<()> {        
         // Initialize the sensor with default settings
-        self.write_reg(Register::Ctrl1 as u8, 0x60)?;        
+        self.write_reg(Register::Ctrl1 as u8, 0x60)
+            .map_err(|e| eyre::eyre!("Failed to write Ctrl1: {}", e))?;
+        
         // Configure accelerometer: 8g range, 1000Hz ODR
-        self.write_reg(Register::Ctrl2 as u8, 0x23)?; // 8g range | 1000Hz        
+        self.write_reg(Register::Ctrl2 as u8, 0x23)
+            .map_err(|e| eyre::eyre!("Failed to write Ctrl2: {}", e))?;
+        
         // Configure gyroscope: 512dps range, 1000Hz ODR
-        self.write_reg(Register::Ctrl3 as u8, 0x43)?; // 512dps | 1000Hz        
+        self.write_reg(Register::Ctrl3 as u8, 0x43)
+            .map_err(|e| eyre::eyre!("Failed to write Ctrl3: {}", e))?;
+        
         // Enable accelerometer and gyroscope
-        self.write_reg(Register::Ctrl7 as u8, 0x03)?; // Enable both sensors        
+        self.write_reg(Register::Ctrl7 as u8, 0x03)
+            .map_err(|e| eyre::eyre!("Failed to write Ctrl7: {}", e))?;
+        
         Ok(())
     }
 
-    fn write_reg(&mut self, reg: u8, value: u8) -> Result<(), Box<dyn Error>> {
-        self.i2c.smbus_write_byte_data(reg, value)?;
+    fn write_reg(&mut self, reg: u8, value: u8) -> Result<()> {
+        self.i2c.smbus_write_byte_data(reg, value)
+            .map_err(|e| eyre::eyre!("I2C write failed: {}", e))?;
         Ok(())
     }
 
-    fn read_reg(i2c: &mut LinuxI2CDevice, reg: u8) -> Result<u8, Box<dyn Error>> {
-        let value = i2c.smbus_read_byte_data(reg)?;
-        Ok(value)
+    fn read_reg(i2c: &mut LinuxI2CDevice, reg: u8) -> Result<u8> {
+        i2c.smbus_read_byte_data(reg)
+            .map_err(|e| eyre::eyre!("I2C read failed: {}", e))
     }
 
-    fn read_bytes(&mut self, reg: u8, buf: &mut [u8]) -> Result<(), Box<dyn Error>> {
+    fn read_bytes(&mut self, reg: u8, buf: &mut [u8]) -> Result<()> {
         for i in 0..buf.len() {
-            buf[i] = self.i2c.smbus_read_byte_data(reg + i as u8)?;
+            buf[i] = self.i2c.smbus_read_byte_data(reg + i as u8)
+                .map_err(|e| eyre::eyre!("I2C read failed at byte {}: {}", i, e))?;
         }
         Ok(())
     }
 
-    pub fn read_data(&mut self) -> Result<ImuData, Box<dyn Error>> {
+    pub fn read_data(&mut self) -> Result<ImuData> {
         let mut buf = [0u8; 12];
         self.read_bytes(Register::AxL as u8, &mut buf)?;
 

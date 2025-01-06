@@ -9,7 +9,7 @@ use kos_core::{
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
-use crate::firmware::qmi8658::QMI8658;
+use crate::firmware::QMI8658;
 
 pub struct ZBotIMU {
     imu: Arc<Mutex<QMI8658>>,
@@ -39,10 +39,10 @@ impl Default for ZBotIMU {
 #[async_trait]
 impl IMU for ZBotIMU {
     async fn get_values(&self) -> Result<ImuValuesResponse> {
-        let imu = self.imu.lock().await;
+        let mut imu = self.imu.lock().await;
         
         let data = imu.read_data()
-            .map_err(|e| anyhow::anyhow!("Failed to read QMI8658 data: {}", e))?;
+            .map_err(|e| eyre::eyre!("Failed to read QMI8658 data: {}", e))?;
 
         Ok(ImuValuesResponse {
             accel_x: data.acc_x as f64,
