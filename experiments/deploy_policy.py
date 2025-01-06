@@ -40,13 +40,16 @@ ID_TO_JOINT_NAME = {
     15: "left_shoulder_pitch",
     16: "left_elbow_pitch",
 }
+breakpoint()
 
+for i in range(1, 17):  
+    kos.actuator.configure_actuator(i, torque_enabled=True)
 
 kos.actuator.configure_actuator(1, torque_enabled=True)
-kos.actuator.configure_actuator(1, torque_enabled=False)
-n = 10
-kos.actuator.get_actuators_state([16])
-kos.actuator.command_actuators([{"actuator_id": 16, "position": -0}])
+
+
+kos.actuator.get_actuators_state([1])
+kos.actuator.command_actuators([{"actuator_id": 1, "position": -80}])
 
 
 kos.actuator.command_actuators([
