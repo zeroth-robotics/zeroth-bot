@@ -1,4 +1,4 @@
-import pykos 
+import pykos
 
 kos = pykos.KOS("192.168.42.1")
 
@@ -22,24 +22,7 @@ ID_TO_SIGNS = {
     16: 1,
 }
 
-ID_TO_JOINT_NAME = {
-    1: "right_ankle_pitch",
-    2: "right_knee_pitch",
-    3: "right_hip_pitch",
-    4: "right_hip_yaw",
-    5: "right_hip_roll",
-    6: "left_ankle_pitch",
-    7: "left_knee_pitch",
-    8: "left_hip_pitch",
-    9: "left_hip_yaw",
-    10: "left_hip_roll",
-    11: "right_elbow_pitch",
-    12: "right_shoulder_pitch",
-    13: "right_shoulder_yaw",
-    14: "left_shoulder_yaw",
-    15: "left_shoulder_pitch",
-    16: "left_elbow_pitch",
-}
+
 breakpoint()
 
 for i in range(1, 17):  
