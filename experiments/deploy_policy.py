@@ -2,9 +2,52 @@ import pykos
 
 kos = pykos.KOS("192.168.42.1")
 
-kos.actuator.get_actuators_state([1])
+
+ID_TO_SIGNS = {
+    1: 1,
+    2: 1,
+    3: 1,
+    4: 1,
+    5: 1,
+    6: 1,
+    7: -1,
+    8: -1,
+    9: -1,
+    10: -1,
+    11: 1,
+    12: 1,
+    13: 1,
+    14: 1,
+    15: 1,
+    16: 1,
+}
+
+ID_TO_JOINT_NAME = {
+    1: "right_ankle_pitch",
+    2: "right_knee_pitch",
+    3: "right_hip_pitch",
+    4: "right_hip_yaw",
+    5: "right_hip_roll",
+    6: "left_ankle_pitch",
+    7: "left_knee_pitch",
+    8: "left_hip_pitch",
+    9: "left_hip_yaw",
+    10: "left_hip_roll",
+    11: "right_elbow_pitch",
+    12: "right_shoulder_pitch",
+    13: "right_shoulder_yaw",
+    14: "left_shoulder_yaw",
+    15: "left_shoulder_pitch",
+    16: "left_elbow_pitch",
+}
+
 
 kos.actuator.configure_actuator(1, torque_enabled=True)
+kos.actuator.configure_actuator(1, torque_enabled=False)
+n = 10
+kos.actuator.get_actuators_state([16])
+kos.actuator.command_actuators([{"actuator_id": 16, "position": -0}])
+
 
 kos.actuator.command_actuators([
     {"actuator_id": 1, "position": 0},
