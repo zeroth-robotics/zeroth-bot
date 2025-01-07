@@ -50,6 +50,7 @@ impl Platform for ZBotPlatform {
     ) -> Pin<Box<dyn Future<Output = eyre::Result<Vec<ServiceEnum>>> + Send + 'a>> {
         Box::pin(async move {
             let actuator = ZBotActuator::new().await?;
+
             let imu = ZBotIMU::new("/dev/i2c-1")?;
 
             Ok(vec![

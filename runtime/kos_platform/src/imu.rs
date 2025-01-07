@@ -84,6 +84,8 @@ impl IMU for ZBotIMU {
         info!("Starting IMU calibration");
         
         let mut imu = self.imu.lock().await;
+
+        imu.reset()?;
         let cal_status = imu.get_calibration_status()?;
         
         debug!(
