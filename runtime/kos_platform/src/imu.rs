@@ -38,17 +38,19 @@ impl IMU for ZBotIMU {
         let mut imu = self.imu.lock().await;
         
         let accel = imu.get_linear_acceleration()?;
+        let gyro = imu.get_gyroscope()?;
+        let mag = imu.get_magnetometer().ok();
         
         Ok(ImuValuesResponse {
             accel_x: accel.x as f64,
             accel_y: accel.y as f64,
             accel_z: accel.z as f64,
-            gyro_x: 0.0,
-            gyro_y: 0.0,
-            gyro_z: 0.0,
-            mag_x: None,
-            mag_y: None,
-            mag_z: None,
+            gyro_x: gyro.x as f64,
+            gyro_y: gyro.y as f64,
+            gyro_z: gyro.z as f64,
+            mag_x: mag.as_ref().map(|m| m.x as f64),
+            mag_y: mag.as_ref().map(|m| m.y as f64),
+            mag_z: mag.as_ref().map(|m| m.z as f64),
             error: None,
         })
     }
@@ -80,6 +82,17 @@ impl IMU for ZBotIMU {
 
     async fn calibrate(&self) -> Result<Operation> {
         info!("Starting IMU calibration");
+        
+        let mut imu = self.imu.lock().await;
+        let cal_status = imu.get_calibration_status()?;
+        
+        debug!(
+            "Calibration Status - Sys: {}, Gyro: {}, Accel: {}, Mag: {}", 
+            (cal_status >> 6) & 0x03,
+            (cal_status >> 4) & 0x03,
+            (cal_status >> 2) & 0x03,
+            cal_status & 0x03
+        );
 
         Ok(Operation {
             name: "operations/calibrate_imu/0".to_string(),
