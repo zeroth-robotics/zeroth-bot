@@ -8,8 +8,7 @@ repository = "https://github.com/kscalelabs/kos"
 description = "KOS platform for Zeroth-01"
 
 [dependencies]
-# kos_core = { version = "0.1.1", path = "../../kos_core" }
-kos_core = "0.1.1"
+kos_core = { version = "0.1", path = "../../kos_core" }
 async-trait = "0.1"
 eyre = "0.6"
 serde = { version = "1.0", features = ["derive"] }
@@ -17,4 +16,4 @@ serde_json = "1.0"
 tonic = { git = "https://github.com/hatomist/tonic-milkv" }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1.41"
-linux_bno055 = "0.0.2"
+linux_bno055 = "0.0.3"

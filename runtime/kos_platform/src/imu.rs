@@ -5,7 +5,7 @@ use kos_core::{
     hal::{EulerAnglesResponse, ImuValuesResponse, QuaternionResponse, IMU},
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
-use linux_bno055::Bno055;
+use linux_bno055::{Bno055, OperationMode};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
@@ -43,10 +43,10 @@ impl IMU for ZBotIMU {
             accel_x: accel.x as f64,
             accel_y: accel.y as f64,
             accel_z: accel.z as f64,
-            gyro_x: 0.0, // Note: linux_bno055 doesn't expose raw gyro values in the example
-            gyro_y: 0.0, // You may want to add these if needed
+            gyro_x: 0.0,
+            gyro_y: 0.0,
             gyro_z: 0.0,
-            mag_x: None, // Similarly for magnetometer values
+            mag_x: None,
             mag_y: None,
             mag_z: None,
             error: None,
@@ -102,7 +102,7 @@ impl IMU for ZBotIMU {
         match imu.reset() {
             Ok(_) => {
                 // Reset successful, now set mode back to NDOF
-                if let Err(e) = imu.set_mode(linux_bno055::registers::OperationMode::Ndof) {
+                if let Err(e) = imu.set_mode(OperationMode::Ndof) {
                     error!("Failed to set IMU mode after reset: {}", e);
                     return Ok(ActionResponse {
                         success: false,
