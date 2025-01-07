@@ -37,7 +37,7 @@ impl IMU for ZBotIMU {
     async fn get_values(&self) -> Result<ImuValuesResponse> {
         let mut imu = self.imu.lock().await;
         
-        let accel = imu.get_linear_acceleration()?;
+        let accel = imu.get_accelerometer()?;
         let gyro = imu.get_gyroscope()?;
         let mag = imu.get_magnetometer().ok();
         
