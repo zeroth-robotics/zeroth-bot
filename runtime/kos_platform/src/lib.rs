@@ -51,14 +51,22 @@ impl Platform for ZBotPlatform {
         Box::pin(async move {
             let actuator = ZBotActuator::new().await?;
 
-            let imu = ZBotIMU::new("/dev/i2c-1")?;
+            let mut services = vec![ServiceEnum::Actuator(ActuatorServiceServer::new(
+                ActuatorServiceImpl::new(Arc::new(actuator)),
+            ))];
 
-            Ok(vec![
-                ServiceEnum::Actuator(ActuatorServiceServer::new(ActuatorServiceImpl::new(
-                    Arc::new(actuator),
-                ))),
-                ServiceEnum::Imu(ImuServiceServer::new(IMUServiceImpl::new(Arc::new(imu)))),
-            ])
+            match ZBotIMU::new("/dev/i2c-1") {
+                Ok(imu) => {
+                    services.push(ServiceEnum::Imu(ImuServiceServer::new(IMUServiceImpl::new(
+                        Arc::new(imu),
+                    ))));
+                }
+                Err(e) => {
+                    eprintln!("Failed to initialize IMU: {}", e);
+                }
+            }
+
+            Ok(services)
         })
     }
 
