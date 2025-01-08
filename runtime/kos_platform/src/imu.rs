@@ -1,6 +1,4 @@
 use async_trait::async_trait;
-
-use crate::firmware::QMI8658;
 use eyre::Result;
 use kos_core::{
     google_proto::longrunning::Operation,
