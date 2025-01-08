@@ -6,15 +6,15 @@ pub use actuator::*;
 pub use firmware::*;
 pub use imu::*;
 
-use kos_core::{Platform, ServiceEnum};
-use tonic::async_trait;
-use std::sync::Arc;
-use kos_core::services::{ActuatorServiceImpl, IMUServiceImpl, OperationsServiceImpl};
 use kos_core::kos_proto::actuator::actuator_service_server::ActuatorServiceServer;
 use kos_core::kos_proto::imu::imu_service_server::ImuServiceServer;
+use kos_core::services::{ActuatorServiceImpl, IMUServiceImpl, OperationsServiceImpl};
+use kos_core::{Platform, ServiceEnum};
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
+use tonic::async_trait;
 
 pub struct ZBotPlatform {}
 
@@ -50,15 +50,14 @@ impl Platform for ZBotPlatform {
     ) -> Pin<Box<dyn Future<Output = eyre::Result<Vec<ServiceEnum>>> + Send + 'a>> {
         Box::pin(async move {
             let actuator = ZBotActuator::new().await?;
+
             let imu = ZBotIMU::new("/dev/i2c-1")?;
 
             Ok(vec![
-                ServiceEnum::Actuator(ActuatorServiceServer::new(
-                    ActuatorServiceImpl::new(Arc::new(actuator))
-                )),
-                ServiceEnum::Imu(ImuServiceServer::new(
-                    IMUServiceImpl::new(Arc::new(imu))
-                ))
+                ServiceEnum::Actuator(ActuatorServiceServer::new(ActuatorServiceImpl::new(
+                    Arc::new(actuator),
+                ))),
+                ServiceEnum::Imu(ImuServiceServer::new(IMUServiceImpl::new(Arc::new(imu)))),
             ])
         })
     }

@@ -1,9 +1,9 @@
+use eyre::Result;
 use i2cdev::core::I2CDevice;
 use i2cdev::linux::LinuxI2CDevice;
 use std::error::Error as StdError;
 use std::thread;
 use std::time::Duration;
-use eyre::Result;
 
 const QMI8658_SLAVE_ADDR_L: u8 = 0x6a;
 const QMI8658_SLAVE_ADDR_H: u8 = 0x6b;
@@ -70,7 +70,7 @@ impl QMI8658 {
             .map_err(|e| eyre::eyre!("Failed to create I2C device: {}", e))?;
         let chip_id = Self::read_reg(&mut i2c, Register::WhoAmI as u8)
             .map_err(|e| eyre::eyre!("Failed to read WHO_AM_I register: {}", e))?;
-        
+
         Ok(Self {
             i2c,
             acc_lsb_div: 1 << 12, // Default 8g range
@@ -78,28 +78,29 @@ impl QMI8658 {
         })
     }
 
-    pub fn init(&mut self) -> Result<()> {        
+    pub fn init(&mut self) -> Result<()> {
         // Initialize the sensor with default settings
         self.write_reg(Register::Ctrl1 as u8, 0x60)
             .map_err(|e| eyre::eyre!("Failed to write Ctrl1: {}", e))?;
-        
+
         // Configure accelerometer: 8g range, 1000Hz ODR
         self.write_reg(Register::Ctrl2 as u8, 0x23)
             .map_err(|e| eyre::eyre!("Failed to write Ctrl2: {}", e))?;
-        
+
         // Configure gyroscope: 512dps range, 1000Hz ODR
         self.write_reg(Register::Ctrl3 as u8, 0x43)
             .map_err(|e| eyre::eyre!("Failed to write Ctrl3: {}", e))?;
-        
+
         // Enable accelerometer and gyroscope
         self.write_reg(Register::Ctrl7 as u8, 0x03)
             .map_err(|e| eyre::eyre!("Failed to write Ctrl7: {}", e))?;
-        
+
         Ok(())
     }
 
     fn write_reg(&mut self, reg: u8, value: u8) -> Result<()> {
-        self.i2c.smbus_write_byte_data(reg, value)
+        self.i2c
+            .smbus_write_byte_data(reg, value)
             .map_err(|e| eyre::eyre!("I2C write failed: {}", e))?;
         Ok(())
     }
@@ -111,7 +112,9 @@ impl QMI8658 {
 
     fn read_bytes(&mut self, reg: u8, buf: &mut [u8]) -> Result<()> {
         for i in 0..buf.len() {
-            buf[i] = self.i2c.smbus_read_byte_data(reg + i as u8)
+            buf[i] = self
+                .i2c
+                .smbus_read_byte_data(reg + i as u8)
                 .map_err(|e| eyre::eyre!("I2C read failed at byte {}: {}", i, e))?;
         }
         Ok(())

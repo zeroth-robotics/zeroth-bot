@@ -137,6 +137,8 @@ build-kos:
     - build-cviwrapper
     - build-servo
   image: $TOOLCHAIN_IMAGE:latest
+  variables:
+    CC_riscv64gc_unknown_linux_musl: "/sdk/host/bin/riscv64-buildroot-linux-musl-gcc.br_real"
   script:
     - git clone https://github.com/kscalelabs/kos.git --depth 1
     - cd kos
