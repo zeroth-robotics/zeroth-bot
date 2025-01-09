@@ -1,26 +1,33 @@
-""" Deploying policy for standing tests 
-# Motor joint order:
-# Left leg:
-#   - left_hip_roll
-#   - left_hip_yaw  
-#   - left_hip_pitch
-#   - left_knee_pitch
-#   - left_ankle_pitch
-# Right leg:
-#   - right_hip_roll
-#   - right_hip_yaw
-#   - right_hip_pitch
-#   - right_knee_pitch
-#   - right_ankle_pitch
-"""
+""" Deploying policy for tests."""
 import argparse
 import time
 
 import numpy as np
 import pykos
-# from imu import HexmoveImuReader
 from kinfer.inference import ONNXModel
 import logging
+
+
+def get_gravity_orientation(quaternion):
+    """
+    Args:
+        quaternion: np.ndarray[float, float, float, float]
+    
+    Returns:
+        gravity_orientation: np.ndarray[float, float, float]
+    """
+    qw = quaternion[0]
+    qx = quaternion[1]
+    qy = quaternion[2]
+    qz = quaternion[3]
+
+    gravity_orientation = np.zeros(3)
+
+    gravity_orientation[0] = 2 * (-qz * qx + qw * qy)
+    gravity_orientation[1] = -2 * (qz * qy + qw * qx)
+    gravity_orientation[2] = 1 - 2 * (qw * qw + qz * qz)
+
+    return gravity_orientation
 
 
 DT = FREQUENCY = 1/100. # 100Hz
@@ -93,7 +100,7 @@ class RealPPOController:
         self.model_info["default_standing"] = np.array([0.0, 0.0, -0.377, 0.796, 0.377, 0.0, 0.0, 0.377, -0.796, -0.377])
 
         for id in self.all_ids:
-            self.kos.actuator.configure_actuator(id, kp=32, kd=32, torque_enabled=True)
+            self.kos.actuator.configure_actuator(id, kp=45, kd=32, torque_enabled=True)
 
         self.initial_offsets = []
         for id in self.all_ids:
@@ -108,8 +115,6 @@ class RealPPOController:
         self.offsets = self.initial_offsets + self.offsets
         print(f"Offsets: {self.offsets}")
 
-        # Add IMU initialization
-        # self.imu_reader = HexmoveImuReader("can0", 1, 1)
         # self.projected_gravity = self.imu_reader.get_projected_gravity()
         # Initialize input state with dynamic sizes from metadata
         self.input_data = {
@@ -130,8 +135,7 @@ class RealPPOController:
 
         breakpoint()
         self.set_default_position()
-        breakpoint()
-        time.sleep(2)
+        time.sleep(1)
         print('Default position set')
 
     def update_robot_state(self) -> None:
@@ -168,8 +172,12 @@ class RealPPOController:
         joint_positions = self.joint_mapping_signs * joint_positions
         joint_velocities = self.joint_mapping_signs * joint_velocities
 
-        # projected_gravity = self.imu_reader.get_projected_gravity()
-        projected_gravity = np.array([0, 0, -1])
+        quaternion = self.kos.imu.get_quaternion()
+
+        # TODO - check this against mujoco
+        projected_gravity = get_gravity_orientation([quaternion.w, quaternion.x, quaternion.y, quaternion.z])
+        projected_gravity = np.array([projected_gravity[0], projected_gravity[2], projected_gravity[1]])
+
         # Update input dictionary
         self.input_data["dof_pos.1"] = joint_positions.astype(np.float32)
         self.input_data["dof_vel.1"] = joint_velocities.astype(np.float32)
