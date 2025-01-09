@@ -87,7 +87,7 @@ impl FeetechActuator for Sts3215 {
             let speed_raw = info.current_speed as u16;
             let speed_magnitude = speed_raw & 0x7FFF;
             let speed_sign = if speed_raw & 0x8000 != 0 { -1.0 } else { 1.0 };
-            speed_sign * (self.raw_to_degrees(speed_magnitude))
+            speed_sign * (self.raw_to_degrees(speed_magnitude) + 180.0)
         };
         self.info.load_percent = info.current_load as f32 / 100.0;
         self.info.voltage_v = info.current_voltage as f32 / 10.0;
@@ -96,11 +96,11 @@ impl FeetechActuator for Sts3215 {
     }
 
     fn degrees_to_raw(&self, degrees: f32) -> u16 {
-        (degrees / 360.0 * 4096.0) as u16
+        ((degrees + 180.0) / 360.0 * 4096.0) as u16
     }
 
     fn raw_to_degrees(&self, raw: u16) -> f32 {
-        raw as f32 / 4096.0 * 360.0
+        raw as f32 / 4096.0 * 360.0 - 180.0
     }
 
     fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) {

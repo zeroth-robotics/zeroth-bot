@@ -20,9 +20,13 @@ impl ZBotActuator {
         let mut supervisor = FeetechSupervisor::new()?;
 
         // Add the servo with ID 1
-        supervisor
-            .add_servo(1, FeetechActuatorType::Sts3215)
-            .await?;
+
+        let actuator_list = [1, 14, 15];
+        for id in actuator_list {
+            supervisor
+                .add_servo(id, FeetechActuatorType::Sts3215)
+                .await?;
+        }
 
         Ok(Self {
             supervisor: Arc::new(RwLock::new(supervisor)),

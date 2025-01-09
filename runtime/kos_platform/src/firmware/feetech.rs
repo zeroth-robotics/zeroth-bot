@@ -5,12 +5,13 @@ use std::fmt;
 use std::os::raw::{c_int, c_short, c_uchar, c_uint, c_ushort};
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
-
+use tracing::info;
 const MAX_SERVO_COMMAND_DATA: usize = 40;
 const MAX_SHMEM_DATA: usize = 2048;
 const MAX_SERVOS: usize = 32;
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct ServoInfo {
     pub id: c_uchar,
     pub last_read_ms: c_uint,
@@ -35,6 +36,7 @@ pub struct ServoInfo {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct ServoInfoBuffer {
     pub retry_count: c_uint,
     pub read_count: c_uint,
@@ -57,6 +59,7 @@ pub struct ShmemData {
 }
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct BroadcastCommand {
     pub data_length: c_uint,
     pub data: [c_uchar; MAX_SHMEM_DATA],
@@ -135,7 +138,7 @@ impl FeetechSupervisor {
         };
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(5));
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(5)); // 200hz
             loop {
                 interval.tick().await;
                 unsafe {
