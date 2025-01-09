@@ -139,17 +139,54 @@ impl FeetechSupervisor {
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(5)); // 200hz
+            let mut stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(5)); // 5 seconds
+            
+            // Stats tracking
+            let mut accumulated_stats = ServoInfoBuffer {
+                retry_count: 0,
+                read_count: 0,
+                loop_count: 0,
+                fault_count: 0,
+                last_read_ms: 0,
+                servos: unsafe { std::mem::zeroed() },
+            };
+
             loop {
-                interval.tick().await;
-                unsafe {
-                    servo_get_info(&mut info_buffer);
-                }
-                let mut servos = supervisor_clone.servos.write().await;
-                for servo in &info_buffer.servos {
-                    if servo.id != 0 {
-                        if let Some(actuator) = servos.get_mut(&servo.id) {
-                            actuator.update_info(servo);
+                tokio::select! {
+                    _ = interval.tick() => {
+                        unsafe {
+                            servo_get_info(&mut info_buffer);
                         }
+                        
+                        // Accumulate stats
+                        accumulated_stats.retry_count += info_buffer.retry_count;
+                        accumulated_stats.read_count += info_buffer.read_count;
+                        accumulated_stats.loop_count += info_buffer.loop_count;
+                        accumulated_stats.fault_count += info_buffer.fault_count;
+
+                        let mut servos = supervisor_clone.servos.write().await;
+                        for servo in &info_buffer.servos {
+                            if servo.id != 0 {
+                                if let Some(actuator) = servos.get_mut(&servo.id) {
+                                    actuator.update_info(servo);
+                                }
+                            }
+                        }
+                    }
+                    _ = stats_interval.tick() => {
+                        info!(
+                            "Servo Stats (5s) - Retries: {}, Reads: {}, Loops: {}, Faults: {}",
+                            accumulated_stats.retry_count,
+                            accumulated_stats.read_count,
+                            accumulated_stats.loop_count,
+                            accumulated_stats.fault_count
+                        );
+                        
+                        // Reset accumulated stats
+                        accumulated_stats.retry_count = 0;
+                        accumulated_stats.read_count = 0;
+                        accumulated_stats.loop_count = 0;
+                        accumulated_stats.fault_count = 0;
                     }
                 }
             }
