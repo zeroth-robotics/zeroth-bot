@@ -1,6 +1,6 @@
 [package]
 name = "kos-zeroth-01"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Denys Bezmenov <denys@kscale.dev>", "Wesley Maa <wesley.maa@gmail.com>", "Jingxiang Mo <jx@kscale.dev>"]
 edition = "2021"
 license = "MIT"
