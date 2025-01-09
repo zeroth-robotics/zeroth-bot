@@ -1,6 +1,6 @@
 [package]
 name = "kos-zeroth-01"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Denys Bezmenov <denys@kscale.dev>", "Wesley Maa <wesley.maa@gmail.com>", "Jingxiang Mo <jx@kscale.dev>"]
 edition = "2021"
 license = "MIT"
@@ -8,12 +8,12 @@ repository = "https://github.com/kscalelabs/kos"
 description = "KOS platform for Zeroth-01"
 
 [dependencies]
-kos_core = { version = "0.1", path = "../../kos_core" }
+kos_core = { version = "0.1.2", path = "../../kos_core" }
 async-trait = "0.1"
 eyre = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tonic = { git = "https://github.com/hatomist/tonic-milkv" }
+tonic = { version="0.12", git = "https://github.com/hatomist/tonic-milkv" }
 tokio = { version = "1", features = ["full"] }
 linux_bno055 = "0.0.5"
 i2cdev = "0.6.1"
