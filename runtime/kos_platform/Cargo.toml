@@ -18,3 +18,4 @@ tokio = { version = "1", features = ["full"] }
 linux_bno055 = "0.0.5"
 i2cdev = "0.6.1"
 tracing = "0.1"
+uuid = { version = "1.0", features = ["v4"] }

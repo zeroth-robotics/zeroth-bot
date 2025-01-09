@@ -1,6 +1,9 @@
 mod feetech;
+mod cvitek;
 
 pub use feetech::Servo;
+
+pub use cvitek::Model;
 
 pub mod hal {
     use serde::{Deserialize, Serialize};
