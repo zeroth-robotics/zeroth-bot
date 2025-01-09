@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+
 use eyre::Result;
 use kos_core::{
     google_proto::longrunning::Operation,
@@ -53,6 +54,24 @@ impl IMU for ZBotIMU {
             mag_x: mag.as_ref().map(|m| m.x as f64),
             mag_y: mag.as_ref().map(|m| m.y as f64),
             mag_z: mag.as_ref().map(|m| m.z as f64),
+            error: None,
+        })
+    }
+
+    async fn get_advanced_values(&self) -> Result<ImuAdvancedValuesResponse> {
+        let mut imu = self.imu.lock().await;
+
+        let lin_acc = imu.get_linear_acceleration().ok();
+        let grav = imu.get_gravity_vector().ok();
+
+        Ok(ImuAdvancedValuesResponse {
+            lin_acc_x: lin_acc.as_ref().map(|g| g.x as f64),
+            lin_acc_y: lin_acc.as_ref().map(|g| g.y as f64),
+            lin_acc_z: lin_acc.as_ref().map(|g| g.z as f64),
+            grav_x: grav.as_ref().map(|g| g.x as f64),
+            grav_y: grav.as_ref().map(|g| g.y as f64),
+            grav_z: grav.as_ref().map(|g| g.z as f64),
+            temp: imu.get_temperature().ok().map(|t| t as f64),
             error: None,
         })
     }
