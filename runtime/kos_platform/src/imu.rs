@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+
+use crate::firmware::QMI8658;
 use eyre::Result;
 use kos_core::{
     google_proto::longrunning::Operation,
@@ -40,6 +42,7 @@ impl IMU for ZBotIMU {
         let accel = imu.get_accelerometer()?;
         let gyro = imu.get_gyroscope()?;
         let mag = imu.get_magnetometer().ok();
+        let grav = imu.get_gravity_vector().ok();
 
         Ok(ImuValuesResponse {
             accel_x: accel.x as f64,
@@ -51,6 +54,9 @@ impl IMU for ZBotIMU {
             mag_x: mag.as_ref().map(|m| m.x as f64),
             mag_y: mag.as_ref().map(|m| m.y as f64),
             mag_z: mag.as_ref().map(|m| m.z as f64),
+            grav_x: grav.as_ref().map(|g| g.x as f64),
+            grav_y: grav.as_ref().map(|g| g.y as f64),
+            grav_z: grav.as_ref().map(|g| g.z as f64),
             error: None,
         })
     }
