@@ -1,6 +1,6 @@
 mod feetech;
 
-pub use feetech::Servo;
+mod feetech_servo;
 
 pub mod hal {
     use serde::{Deserialize, Serialize};
