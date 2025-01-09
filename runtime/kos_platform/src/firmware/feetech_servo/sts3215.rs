@@ -31,7 +31,7 @@ impl FeetechActuator for Sts3215 {
         unimplemented!()
     }
     fn enable_torque(&mut self) {
-        self.info.tor
+        self.info.torque_enabled = true;
         unimplemented!()
     }
     fn disable_torque(&mut self) {

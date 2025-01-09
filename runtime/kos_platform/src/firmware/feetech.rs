@@ -134,7 +134,7 @@ impl FeetechSupervisor {
         };
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(10));
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(5));
             loop {
                 interval.tick().await;
                 unsafe {
