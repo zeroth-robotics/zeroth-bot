@@ -20,6 +20,8 @@ import numpy as np
 import pykos
 # from imu import HexmoveImuReader
 from kinfer.inference import ONNXModel
+import logging
+
 
 DT = FREQUENCY = 1/100. # 100Hz
 
@@ -48,13 +50,16 @@ class RealPPOController:
             self, 
             model_path: str,
             joint_mapping_signs: np.ndarray,
-            kos: pykos.KOS = None
+            kos: pykos.KOS = None,
+            logger: logging.Logger = None,
         ) -> None:
 
         if kos is None:
             self.kos = pykos.KOS()
         else:
             self.kos = kos
+
+        self.logger = logger
 
         # Walking command defaults
         self.command = {
@@ -85,9 +90,7 @@ class RealPPOController:
 
         self.all_ids = self.left_leg_ids + self.right_leg_ids
 
-        self.onshape_wrong_offsets = np.array([0, 0, 0, 2.76, 1.19,  0, 0, 0, 0, 0])
-        self.model_info["default_standing"] = np.array([0.0, 0.0, 0.296, 2.2, 0.927, 0.0, 0.0, -0.296, 0.579, 0.283])
-        self.model_info["default_standing"] = self.model_info["default_standing"] - self.onshape_wrong_offsets
+        self.model_info["default_standing"] = np.array([0.0, 0.0, -0.377, 0.796, 0.377, 0.0, 0.0, 0.377, -0.796, -0.377])
 
         for id in self.all_ids:
             self.kos.actuator.configure_actuator(id, kp=32, kd=32, torque_enabled=True)
@@ -107,11 +110,7 @@ class RealPPOController:
 
         # Add IMU initialization
         # self.imu_reader = HexmoveImuReader("can0", 1, 1)
-        # self.euler_signs = np.array([1, 1, 1])
-        # eu_ang[eu_ang > math.pi] -= 2 * math.pi
-
-        self.set_default_position()
-
+        # self.projected_gravity = self.imu_reader.get_projected_gravity()
         # Initialize input state with dynamic sizes from metadata
         self.input_data = {
             "x_vel.1": np.zeros(1, dtype=np.float32),
@@ -121,8 +120,7 @@ class RealPPOController:
             "dof_pos.1": np.zeros(self.model_info["num_actions"], dtype=np.float32),
             "dof_vel.1": np.zeros(self.model_info["num_actions"], dtype=np.float32),
             "prev_actions.1": np.zeros(self.model_info["num_actions"], dtype=np.float32),
-            "imu_ang_vel.1": np.zeros(3, dtype=np.float32),
-            "imu_euler_xyz.1": np.zeros(3, dtype=np.float32),
+            "projected_gravity.1": np.zeros(3, dtype=np.float32),
             "buffer.1": np.zeros(self.model_info["num_observations"], dtype=np.float32),
         }
 
@@ -130,14 +128,15 @@ class RealPPOController:
         self.actions = np.zeros(self.model_info["num_actions"], dtype=np.float32)
         self.buffer = np.zeros(self.model_info["num_observations"], dtype=np.float32)
 
+        breakpoint()
         self.set_default_position()
-        time.sleep(6)
+        breakpoint()
+        time.sleep(2)
         print('Default position set')
 
     def update_robot_state(self) -> None:
         """Update input data from robot sensors"""
-        angles = np.array([0, 0, 0])
-        imu_ang_vel = np.array([0, 0, 0])
+
         motor_feedback = self.kos.actuator.get_actuators_state(self.all_ids)
 
         # Create dictionary of motor feedback to motor id
@@ -162,7 +161,6 @@ class RealPPOController:
         ])
 
         joint_positions = np.deg2rad(joint_positions)
-
         joint_velocities = np.deg2rad(joint_velocities)
 
         joint_positions -= self.offsets
@@ -170,11 +168,12 @@ class RealPPOController:
         joint_positions = self.joint_mapping_signs * joint_positions
         joint_velocities = self.joint_mapping_signs * joint_velocities
 
+        # projected_gravity = self.imu_reader.get_projected_gravity()
+        projected_gravity = np.array([0, 0, -1])
         # Update input dictionary
         self.input_data["dof_pos.1"] = joint_positions.astype(np.float32)
         self.input_data["dof_vel.1"] = joint_velocities.astype(np.float32)
-        self.input_data["imu_ang_vel.1"] = imu_ang_vel.astype(np.float32)
-        self.input_data["imu_euler_xyz.1"] = angles.astype(np.float32)
+        self.input_data["projected_gravity.1"] = projected_gravity.astype(np.float32)
         self.input_data["prev_actions.1"] = self.actions
         self.input_data["buffer.1"] = self.buffer
 
@@ -241,19 +240,21 @@ class RealPPOController:
 
         # Send positions to robot
         # EMI issues:
-        for _ in range(3):
-            self.move_actuators(expected_positions)
-        return positions
+        # for _ in range(3):
+        self.move_actuators(expected_positions)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="experiments/kinfer_policy.onnx")
+    parser.add_argument("--model", type=str, default="experiments/zbot_walking.kinfer")
     parser.add_argument("--ip", type=str, default="192.168.42.1")
     args = parser.parse_args()
 
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+
     kos = pykos.KOS(args.ip)
-    motor_signs = np.array([1, 1, -1, -1, -1, 1, 1, -1, -1, -1])
+    motor_signs = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
 
     standing = args.model
 
@@ -261,25 +262,29 @@ def main() -> None:
         model_path=standing,
         joint_mapping_signs=motor_signs,
         kos=kos,
+        logger=logger,
     )
 
     time.sleep(1)
     counter = 0
     try:
+        logger.info("Start loop")
+
         while True:
             loop_start_time = time.time()
             controller.step(DT * counter)
             counter += 1
+            print(f"Time taken: {time.time() - loop_start_time}")
             time.sleep(max(0, FREQUENCY - (time.time() - loop_start_time)))
     except KeyboardInterrupt:
-        print("Exiting...")
+        logger.info("Exiting...")
     except RuntimeError as e:
-        print(e)
+        logger.error(e)
     finally:
         for id in controller.all_ids:
             controller.kos.actuator.configure_actuator(actuator_id=id, torque_enabled=False)
 
-        print("Torque disabled")
+        logger.info("Torque disabled")
 
 
 if __name__ == "__main__":
