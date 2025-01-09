@@ -140,7 +140,7 @@ impl FeetechSupervisor {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(5)); // 200hz
             let mut stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(5)); // 5 seconds
-            
+
             // Stats tracking
             let mut accumulated_stats = ServoInfoBuffer {
                 retry_count: 0,
@@ -157,7 +157,7 @@ impl FeetechSupervisor {
                         unsafe {
                             servo_get_info(&mut info_buffer);
                         }
-                        
+
                         // Accumulate stats
                         accumulated_stats.retry_count += info_buffer.retry_count;
                         accumulated_stats.read_count += info_buffer.read_count;
@@ -181,7 +181,7 @@ impl FeetechSupervisor {
                             accumulated_stats.loop_count,
                             accumulated_stats.fault_count
                         );
-                        
+
                         // Reset accumulated stats
                         accumulated_stats.retry_count = 0;
                         accumulated_stats.read_count = 0;
@@ -247,6 +247,27 @@ impl FeetechSupervisor {
 
         self.broadcast_command().await?;
 
+        Ok(())
+    }
+
+    pub async fn disable_torque(&mut self, id: u8) -> Result<()> {
+        {
+            // New scope to ensure servos lock is dropped
+            let mut servos = self.servos.write().await;
+            servos.get_mut(&id).unwrap().disable_torque();
+        } // servos lock is dropped here
+        self.broadcast_command().await?;
+        Ok(())
+    }
+
+    pub async fn enable_torque(&mut self, id: u8) -> Result<()> {
+        {
+            // New scope to ensure servos lock is dropped
+            let mut servos = self.servos.write().await;
+            servos.get_mut(&id).unwrap().enable_torque();
+            self.actuator_desired_positions.remove(&id);
+        } // servos lock is dropped here
+        self.broadcast_command().await?;
         Ok(())
     }
 

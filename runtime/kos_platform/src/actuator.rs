@@ -74,30 +74,31 @@ impl Actuator for ZBotActuator {
 
     async fn configure_actuator(&self, config: ConfigureActuatorRequest) -> Result<ActionResponse> {
         let mut supervisor = self.supervisor.write().await;
-        let mut servos = supervisor.servos.write().await;
 
-        let result = if let Some(servo) = servos.get_mut(&(config.actuator_id as u8)) {
-            let mut result = Ok(());
+        let result = {
+            let id = config.actuator_id as u8;
 
             if let Some(torque_enabled) = config.torque_enabled {
                 if torque_enabled {
-                    servo.enable_torque();
+                    supervisor.enable_torque(id).await?;
                 } else {
-                    servo.disable_torque();
+                    supervisor.disable_torque(id).await?;
                 }
             }
 
-            // Set PID values if provided
-            let p = config.kp.map(|v| v as f32);
-            let i = config.ki.map(|v| v as f32);
-            let d = config.kd.map(|v| v as f32);
-            if p.is_some() || i.is_some() || d.is_some() {
-                servo.set_pid(p, i, d);
+            let mut servos = supervisor.servos.write().await;
+            if let Some(servo) = servos.get_mut(&id) {
+                // Set PID values if provided
+                let p = config.kp.map(|v| v as f32);
+                let i = config.ki.map(|v| v as f32);
+                let d = config.kd.map(|v| v as f32);
+                if p.is_some() || i.is_some() || d.is_some() {
+                    servo.set_pid(p, i, d);
+                }
+                Ok(())
+            } else {
+                Err(eyre::eyre!("Servo not found"))
             }
-
-            result
-        } else {
-            Err(eyre::eyre!("Servo not found"))
         };
 
         match result {
