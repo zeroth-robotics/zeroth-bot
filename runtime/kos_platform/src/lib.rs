@@ -57,9 +57,9 @@ impl Platform for ZBotPlatform {
 
             match ZBotIMU::new("/dev/i2c-1") {
                 Ok(imu) => {
-                    services.push(ServiceEnum::Imu(ImuServiceServer::new(IMUServiceImpl::new(
-                        Arc::new(imu),
-                    ))));
+                    services.push(ServiceEnum::Imu(ImuServiceServer::new(
+                        IMUServiceImpl::new(Arc::new(imu)),
+                    )));
                 }
                 Err(e) => {
                     eprintln!("Failed to initialize IMU: {}", e);
