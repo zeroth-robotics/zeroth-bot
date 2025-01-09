@@ -1,10 +1,10 @@
+use super::feetech_servo::Sts3215;
 use eyre::Result;
+use std::collections::HashMap;
 use std::fmt;
 use std::os::raw::{c_int, c_short, c_uchar, c_uint, c_ushort};
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
-use std::collections::HashMap;
-use super::feetech_servo::Sts3215;
 
 const MAX_SERVO_COMMAND_DATA: usize = 40;
 const MAX_SHMEM_DATA: usize = 2048;
@@ -124,7 +124,7 @@ impl FeetechSupervisor {
         };
 
         let supervisor_clone = supervisor.clone();
-        
+
         let mut info_buffer = ServoInfoBuffer {
             retry_count: 0,
             read_count: 0,
@@ -158,7 +158,7 @@ impl FeetechSupervisor {
     pub async fn update_active_servos(&mut self) -> Result<()> {
         let servos = self.servos.write().await;
         let servo_ids = servos.iter().map(|(id, _)| *id).collect::<Vec<_>>();
-        
+
         // Create ActiveServoList with proper initialization
         let mut active_servos = ActiveServoList {
             len: servo_ids.len() as c_uint,
@@ -215,10 +215,10 @@ impl FeetechSupervisor {
             data_length: 0,
             data: [0; MAX_SHMEM_DATA],
         };
-        
+
         const SERVO_ADDR_TARGET_POSITION: u8 = 0x2A;
         let mut index = 0;
-        
+
         // Write header
         command.data[index] = SERVO_ADDR_TARGET_POSITION;
         index += 1;
@@ -226,13 +226,13 @@ impl FeetechSupervisor {
         index += 1;
 
         let servos = self.servos.read().await;
-        
+
         // Write data for each servo
         for (id, position) in &self.actuator_desired_positions {
             if let Some(servo) = servos.get(id) {
                 if servo.info().torque_enabled {
                     let position_raw = servo.degrees_to_raw(*position);
-                    
+
                     command.data[index] = *id;
                     index += 1;
                     command.data[index] = (position_raw & 0xFF) as u8;
@@ -250,7 +250,7 @@ impl FeetechSupervisor {
                 return Err(eyre::eyre!("Failed to broadcast command"));
             }
         }
-        
+
         Ok(())
     }
 }

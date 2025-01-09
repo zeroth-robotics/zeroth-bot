@@ -1,4 +1,4 @@
-use crate::firmware::feetech::{FeetechActuatorInfo, ServoInfo, FeetechActuator, feetech_write};
+use crate::firmware::feetech::{feetech_write, FeetechActuator, FeetechActuatorInfo, ServoInfo};
 
 enum Sts3215Register {
     ID = 0x05,
@@ -106,13 +106,21 @@ impl FeetechActuator for Sts3215 {
     fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) {
         self.unlock_eeprom();
         if let Some(p) = p {
-            feetech_write(self.id, Sts3215Register::PProportionalCoeff as u8, &[p as u8]);
+            feetech_write(
+                self.id,
+                Sts3215Register::PProportionalCoeff as u8,
+                &[p as u8],
+            );
         }
         if let Some(i) = i {
             feetech_write(self.id, Sts3215Register::IIntegralCoeff as u8, &[i as u8]);
         }
         if let Some(d) = d {
-            feetech_write(self.id, Sts3215Register::DDifferentialCoeff as u8, &[d as u8]);
+            feetech_write(
+                self.id,
+                Sts3215Register::DDifferentialCoeff as u8,
+                &[d as u8],
+            );
         }
         self.lock_eeprom();
     }

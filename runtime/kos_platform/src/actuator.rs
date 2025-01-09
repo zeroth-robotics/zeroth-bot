@@ -1,13 +1,15 @@
-use crate::firmware::feetech::{FeetechActuator, FeetechActuatorInfo, FeetechActuatorType, FeetechSupervisor};
+use crate::firmware::feetech::{
+    FeetechActuator, FeetechActuatorInfo, FeetechActuatorType, FeetechSupervisor,
+};
 use eyre::Result;
 use kos_core::google_proto::longrunning::Operation;
 use kos_core::hal::Actuator;
 use kos_core::kos_proto::actuator::*;
 use kos_core::kos_proto::common::{ActionResponse, ActionResult, Error as KosError, ErrorCode};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
-use std::collections::HashMap;
 
 pub struct ZBotActuator {
     supervisor: Arc<RwLock<FeetechSupervisor>>,
@@ -16,9 +18,11 @@ pub struct ZBotActuator {
 impl ZBotActuator {
     pub async fn new() -> Result<Self> {
         let mut supervisor = FeetechSupervisor::new()?;
-        
+
         // Add the servo with ID 1
-        supervisor.add_servo(1, FeetechActuatorType::Sts3215).await?;
+        supervisor
+            .add_servo(1, FeetechActuatorType::Sts3215)
+            .await?;
 
         Ok(Self {
             supervisor: Arc::new(RwLock::new(supervisor)),
@@ -67,10 +71,10 @@ impl Actuator for ZBotActuator {
     async fn configure_actuator(&self, config: ConfigureActuatorRequest) -> Result<ActionResponse> {
         let mut supervisor = self.supervisor.write().await;
         let mut servos = supervisor.servos.write().await;
-        
+
         let result = if let Some(servo) = servos.get_mut(&(config.actuator_id as u8)) {
             let mut result = Ok(());
-            
+
             if let Some(torque_enabled) = config.torque_enabled {
                 if torque_enabled {
                     servo.enable_torque();
@@ -107,7 +111,10 @@ impl Actuator for ZBotActuator {
         }
     }
 
-    async fn get_actuators_state(&self, actuator_ids: Vec<u32>) -> Result<Vec<ActuatorStateResponse>> {
+    async fn get_actuators_state(
+        &self,
+        actuator_ids: Vec<u32>,
+    ) -> Result<Vec<ActuatorStateResponse>> {
         let supervisor = self.supervisor.read().await;
         let servos = supervisor.servos.read().await;
 
