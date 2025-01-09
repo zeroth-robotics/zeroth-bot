@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use eyre::Result;
 use kos_core::{
     google_proto::longrunning::Operation,
-    hal::{EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, QuaternionResponse, IMU},
+    hal::{
+        EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, QuaternionResponse, IMU,
+    },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
 use linux_bno055::{Bno055, OperationMode};
