@@ -314,6 +314,18 @@ impl FeetechSupervisor {
 
         Ok(())
     }
+
+    pub async fn change_id(&mut self, id: u8, new_id: u8) -> Result<()> {
+        let mut servos = self.servos.write().await;
+        if let Some(servo) = servos.get_mut(&id) {
+            servo.change_id(new_id);
+            Ok(())
+        } else {
+            let mut new_servo = Box::new(Sts3215::new(id));
+            new_servo.change_id(new_id);
+            Ok(())
+        }
+    }
 }
 
 impl Drop for FeetechSupervisor {

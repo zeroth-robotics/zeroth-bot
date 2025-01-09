@@ -86,6 +86,10 @@ impl Actuator for ZBotActuator {
                 }
             }
 
+            if let Some(new_actuator_id) = config.new_actuator_id {
+                supervisor.change_id(id, new_actuator_id as u8).await?;
+            }
+
             let mut servos = supervisor.servos.write().await;
             if let Some(servo) = servos.get_mut(&id) {
                 // Set PID values if provided
