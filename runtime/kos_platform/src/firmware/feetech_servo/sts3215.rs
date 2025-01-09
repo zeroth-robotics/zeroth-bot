@@ -1,4 +1,26 @@
-use crate::firmware::feetech::{FeetechActuatorInfo, ServoInfo, FeetechActuator, };
+use crate::firmware::feetech::{FeetechActuatorInfo, ServoInfo, FeetechActuator, feetech_write};
+
+enum Sts3215Register {
+    ID = 0x05,
+    PProportionalCoeff = 0x15,
+    DDifferentialCoeff = 0x16,
+    IIntegralCoeff = 0x17,
+    TorqueSwitch = 0x28,
+    TargetLocation = 0x2A,
+    RunningTime = 0x2C,
+    RunningSpeed = 0x2E,
+    TorqueLimit = 0x30,
+    LockMark = 0x37,
+    CurrentLocation = 0x38,
+    CurrentSpeed = 0x3A,
+    CurrentLoad = 0x3C,
+    CurrentVoltage = 0x3E,
+    CurrentTemperature = 0x3F,
+    AsyncWriteFlag = 0x40,
+    ServoStatus = 0x41,
+    MobileSign = 0x42,
+    CurrentCurrent = 0x45,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct Sts3215 {
@@ -13,6 +35,14 @@ impl Sts3215 {
             info: FeetechActuatorInfo::default(),
         }
     }
+
+    fn unlock_eeprom(&mut self) {
+        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x00]);
+    }
+
+    fn lock_eeprom(&mut self) {
+        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x01]);
+    }
 }
 
 impl FeetechActuator for Sts3215 {
@@ -25,21 +55,31 @@ impl FeetechActuator for Sts3215 {
     }
 
     fn set_position(&mut self, position_deg: f32) {
-        unimplemented!()
+        let raw = self.degrees_to_raw(position_deg);
+        feetech_write(self.id, Sts3215Register::TargetLocation as u8, &[raw as u8]);
     }
+
     fn set_speed(&mut self, speed_deg_per_s: f32) {
         unimplemented!()
     }
+
     fn enable_torque(&mut self) {
         self.info.torque_enabled = true;
-        unimplemented!()
+        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x01]);
     }
+
     fn disable_torque(&mut self) {
-        unimplemented!()
+        self.info.torque_enabled = false;
+        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x00]);
     }
+
     fn change_id(&mut self, id: u8) {
-        unimplemented!()
+        self.unlock_eeprom();
+        feetech_write(self.id, Sts3215Register::ID as u8, &[id]);
+        self.lock_eeprom();
+        self.id = id;
     }
+
     fn update_info(&mut self, info: &ServoInfo) {
         self.info.id = self.id;
         self.info.position_deg = self.raw_to_degrees(info.current_location as u16);
@@ -61,5 +101,19 @@ impl FeetechActuator for Sts3215 {
 
     fn raw_to_degrees(&self, raw: u16) -> f32 {
         raw as f32 / 4096.0 * 360.0
+    }
+
+    fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) {
+        self.unlock_eeprom();
+        if let Some(p) = p {
+            feetech_write(self.id, Sts3215Register::PProportionalCoeff as u8, &[p as u8]);
+        }
+        if let Some(i) = i {
+            feetech_write(self.id, Sts3215Register::IIntegralCoeff as u8, &[i as u8]);
+        }
+        if let Some(d) = d {
+            feetech_write(self.id, Sts3215Register::DDifferentialCoeff as u8, &[d as u8]);
+        }
+        self.lock_eeprom();
     }
 }

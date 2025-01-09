@@ -101,6 +101,7 @@ pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
     fn update_info(&mut self, info: &ServoInfo);
     fn degrees_to_raw(&self, degrees: f32) -> u16;
     fn raw_to_degrees(&self, raw: u16) -> f32;
+    fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>);
 }
 
 #[derive(Debug, Clone)]
@@ -260,4 +261,13 @@ impl Drop for FeetechSupervisor {
             servo_deinit();
         }
     }
+}
+
+pub fn feetech_write(id: u8, address: u8, data: &[u8]) -> Result<()> {
+    unsafe {
+        if servo_write(id, address, data.as_ptr(), data.len() as u8) != 0 {
+            return Err(eyre::eyre!("Failed to write to servo"));
+        }
+    }
+    Ok(())
 }

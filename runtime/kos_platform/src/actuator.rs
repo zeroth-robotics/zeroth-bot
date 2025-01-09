@@ -1,5 +1,4 @@
-use crate::firmware::hal::{ServoDirection, ServoMode, ServoRegister, TorqueMode};
-use crate::Servo;
+use crate::firmware::feetech::{FeetechActuator, FeetechActuatorInfo, FeetechActuatorType, FeetechSupervisor};
 use eyre::Result;
 use kos_core::google_proto::longrunning::Operation;
 use kos_core::hal::Actuator;
@@ -8,17 +7,21 @@ use kos_core::kos_proto::common::{ActionResponse, ActionResult, Error as KosErro
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
+use std::collections::HashMap;
 
 pub struct ZBotActuator {
-    servo: Arc<Mutex<Servo>>,
+    supervisor: Arc<RwLock<FeetechSupervisor>>,
 }
 
 impl ZBotActuator {
     pub async fn new() -> Result<Self> {
-        let servo = Servo::new()?;
-        servo.enable_readout()?;
+        let mut supervisor = FeetechSupervisor::new()?;
+        
+        // Add the servo with ID 1
+        supervisor.add_servo(1, FeetechActuatorType::Sts3215).await?;
+
         Ok(Self {
-            servo: Arc::new(Mutex::new(servo)),
+            supervisor: Arc::new(RwLock::new(supervisor)),
         })
     }
 }
@@ -26,26 +29,17 @@ impl ZBotActuator {
 #[tonic::async_trait]
 impl Actuator for ZBotActuator {
     async fn command_actuators(&self, commands: Vec<ActuatorCommand>) -> Result<Vec<ActionResult>> {
-        let servo = self
-            .servo
-            .lock()
-            .map_err(|_| Status::internal("Lock error"))?;
+        let mut supervisor = self.supervisor.write().await;
+        let mut desired_positions = HashMap::new();
 
         let mut results = Vec::new();
         for cmd in commands {
             let result = if let Some(position) = cmd.position {
-                // Convert degrees to raw servo position
-                let raw_position = Servo::degrees_to_raw(position as f32);
-                servo.move_servo(cmd.actuator_id as u8, raw_position as i16, 0, 0)
-            } else if let Some(velocity) = cmd.velocity {
-                // Set speed and direction
-                let speed = velocity.abs() as u16;
-                let direction = if velocity >= 0.0 {
-                    ServoDirection::Clockwise
-                } else {
-                    ServoDirection::Counterclockwise
-                };
-                servo.set_speed(cmd.actuator_id as u8, speed, direction)
+                desired_positions.insert(cmd.actuator_id as u8, position as f32);
+                Ok(())
+            } else if let Some(_velocity) = cmd.velocity {
+                // Velocity control not implemented yet in the new library
+                Err(eyre::eyre!("Velocity control not implemented"))
             } else {
                 Ok(()) // No command specified
             };
@@ -63,57 +57,40 @@ impl Actuator for ZBotActuator {
             });
         }
 
+        if !desired_positions.is_empty() {
+            supervisor.move_actuators(&desired_positions).await?;
+        }
+
         Ok(results)
     }
 
     async fn configure_actuator(&self, config: ConfigureActuatorRequest) -> Result<ActionResponse> {
-        let servo = self
-            .servo
-            .lock()
-            .map_err(|_| Status::internal("Lock error"))?;
+        let mut supervisor = self.supervisor.write().await;
+        let mut servos = supervisor.servos.write().await;
+        
+        let result = if let Some(servo) = servos.get_mut(&(config.actuator_id as u8)) {
+            let mut result = Ok(());
+            
+            if let Some(torque_enabled) = config.torque_enabled {
+                if torque_enabled {
+                    servo.enable_torque();
+                } else {
+                    servo.disable_torque();
+                }
+            }
 
-        // Unlock EEPROM for writing
-        servo
-            .write(config.actuator_id as u8, ServoRegister::LockMark, &[0])
-            .map_err(|e| Status::internal(e.to_string()))?;
+            // Set PID values if provided
+            let p = config.kp.map(|v| v as f32);
+            let i = config.ki.map(|v| v as f32);
+            let d = config.kd.map(|v| v as f32);
+            if p.is_some() || i.is_some() || d.is_some() {
+                servo.set_pid(p, i, d);
+            }
 
-        let mut result = Ok(());
-
-        // Apply configurations
-        if let Some(kp) = config.kp {
-            result = result.and(servo.write(
-                config.actuator_id as u8,
-                ServoRegister::PProportionalCoeff,
-                &[kp as u8],
-            ));
-        }
-        if let Some(ki) = config.ki {
-            result = result.and(servo.write(
-                config.actuator_id as u8,
-                ServoRegister::IIntegralCoeff,
-                &[ki as u8],
-            ));
-        }
-        if let Some(kd) = config.kd {
-            result = result.and(servo.write(
-                config.actuator_id as u8,
-                ServoRegister::DDifferentialCoeff,
-                &[kd as u8],
-            ));
-        }
-        if let Some(torque_enabled) = config.torque_enabled {
-            let mode = if torque_enabled {
-                TorqueMode::Enabled
-            } else {
-                TorqueMode::Disabled
-            };
-            result = result.and(servo.set_torque_mode(config.actuator_id as u8, mode));
-        }
-
-        // Lock EEPROM after writing
-        servo
-            .write(config.actuator_id as u8, ServoRegister::LockMark, &[1])
-            .map_err(|e| Status::internal(e.to_string()))?;
+            result
+        } else {
+            Err(eyre::eyre!("Servo not found"))
+        };
 
         match result {
             Ok(_) => Ok(ActionResponse {
@@ -130,36 +107,23 @@ impl Actuator for ZBotActuator {
         }
     }
 
-    async fn calibrate_actuator(&self, request: CalibrateActuatorRequest) -> Result<Operation> {
-        Ok(Operation::default())
-    }
-
-    async fn get_actuators_state(
-        &self,
-        actuator_ids: Vec<u32>,
-    ) -> Result<Vec<ActuatorStateResponse>> {
-        let servo = self
-            .servo
-            .lock()
-            .map_err(|_| Status::internal("Lock error"))?;
+    async fn get_actuators_state(&self, actuator_ids: Vec<u32>) -> Result<Vec<ActuatorStateResponse>> {
+        let supervisor = self.supervisor.read().await;
+        let servos = supervisor.servos.read().await;
 
         let mut states = Vec::new();
         for id in actuator_ids {
-            if let Ok(info) = servo.read_info(id as u8) {
+            if let Some(servo) = servos.get(&(id as u8)) {
+                let info = servo.info();
                 states.push(ActuatorStateResponse {
                     actuator_id: id,
                     online: true,
-                    position: Some(Servo::raw_to_degrees(info.current_location as u16) as f64),
-                    velocity: Some({
-                        let speed_raw = info.current_speed as u16;
-                        let speed_magnitude = speed_raw & 0x7FFF;
-                        let speed_sign = if speed_raw & 0x8000 != 0 { -1.0 } else { 1.0 };
-                        speed_sign * (speed_magnitude as f32 * 360.0 / 4096.0) as f64
-                    }),
-                    torque: None,
-                    temperature: Some(info.current_temperature as f64),
-                    voltage: Some(info.current_voltage as f32 / 10.0),
-                    current: Some(info.current_current as f32 / 100.0),
+                    position: Some(info.position_deg as f64),
+                    velocity: Some(info.speed_deg_per_s as f64),
+                    torque: Some(info.load_percent as f64),
+                    temperature: Some(info.temperature_c as f64),
+                    voltage: Some(info.voltage_v),
+                    current: Some(info.current_ma), // Convert mA to A
                 });
             } else {
                 states.push(ActuatorStateResponse {
@@ -176,5 +140,9 @@ impl Actuator for ZBotActuator {
         }
 
         Ok(states)
+    }
+
+    async fn calibrate_actuator(&self, request: CalibrateActuatorRequest) -> Result<Operation> {
+        Ok(Operation::default())
     }
 }

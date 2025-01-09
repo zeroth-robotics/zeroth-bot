@@ -3,7 +3,7 @@ rustflags = [
     "-C", "target-feature=-crt-static",
     "-Clink-args=--sysroot=/sdk/host/riscv64-buildroot-linux-musl/sysroot",
     "-L", "./firmware/cviwrapper",
-    "-L", "./firmware/sts3215",
+    "-L", "./firmware/feetech",
     "-L", "./firmware/tpu-sdk-sg200x/lib",
     "-L", "./firmware/duo-sdk/rootfs/usr/lib",
     "-L", "./models/tpu-mlir/lib",
