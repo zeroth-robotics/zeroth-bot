@@ -285,7 +285,10 @@ impl FeetechSupervisor {
         {
             // New scope to ensure servos lock is dropped
             let mut servos = self.servos.write().await;
-            servos.get_mut(&id).unwrap().disable_torque();
+            let servo = servos.get_mut(&id).ok_or_else(|| 
+                eyre::eyre!("No such servo with ID {}", id)
+            )?;
+            servo.disable_torque();
         } // servos lock is dropped here
         self.broadcast_command().await?;
         Ok(())
@@ -295,7 +298,10 @@ impl FeetechSupervisor {
         {
             // New scope to ensure servos lock is dropped
             let mut servos = self.servos.write().await;
-            servos.get_mut(&id).unwrap().enable_torque();
+            let servo = servos.get_mut(&id).ok_or_else(|| 
+                eyre::eyre!("No such servo with ID {}", id)
+            )?;
+            servo.enable_torque();
             self.actuator_desired_positions.remove(&id);
         } // servos lock is dropped here
         self.broadcast_command().await?;
