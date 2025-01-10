@@ -12,13 +12,44 @@ use serde_json::Value;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
+use serde::{Serialize, Deserialize};
 
 const MODELS_DIR: &'static str = "/opt/models";
 const METADATA_FILE: &'static str = "/opt/models/metadata.json";
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SerializableModelMetadata {
+    pub model_name: Option<String>,
+    pub model_description: Option<String>,
+    pub model_version: Option<String>,
+    pub model_author: Option<String>,
+}
+
+impl From<&ModelMetadata> for SerializableModelMetadata {
+    fn from(metadata: &ModelMetadata) -> Self {
+        Self {
+            model_name: metadata.model_name.clone(),
+            model_description: metadata.model_description.clone(),
+            model_version: metadata.model_version.clone(),
+            model_author: metadata.model_author.clone(),
+        }
+    }
+}
+
+impl From<SerializableModelMetadata> for ModelMetadata {
+    fn from(metadata: SerializableModelMetadata) -> Self {
+        Self {
+            model_name: metadata.model_name,
+            model_description: metadata.model_description,
+            model_version: metadata.model_version,
+            model_author: metadata.model_author,
+        }
+    }
+}
+
 pub struct ZBotInference {
     loaded_models: Arc<RwLock<HashMap<String, Model>>>,
-    available_models: Arc<RwLock<HashMap<String, ModelMetadata>>>,
+    available_models: Arc<RwLock<HashMap<String, SerializableModelMetadata>>>,
 }
 
 impl ZBotInference {
@@ -44,9 +75,10 @@ impl ZBotInference {
     }
 
     async fn register_model(&self, model_uid: String, metadata: ModelMetadata) -> Result<()> {
+        let serializable_metadata = SerializableModelMetadata::from(&metadata);
         let mut all_models = self.available_models.write().await;
-        all_models.insert(model_uid.clone(), metadata);
-        drop(all_models); // Release the write lock before saving
+        all_models.insert(model_uid.clone(), serializable_metadata);
+        drop(all_models);
         
         self.save_metadata().await?;
         Ok(())
@@ -247,7 +279,7 @@ impl Inference for ZBotInference {
                 .keys()
                 .map(|uid| ModelInfo {
                     uid: uid.clone(),
-                    metadata: available.get(uid).cloned().unwrap_or_default(),
+                    metadata: Some(ModelMetadata::from(available.get(uid).cloned().unwrap_or_default())),
                 })
                 .collect(),
             result: ActionResponse {
@@ -288,7 +320,6 @@ impl Inference for ZBotInference {
         
         let model_infos = match request.filter {
             Some(filter::Filter::ModelUids(ModelUids { uids })) => {
-                // First check if all requested models exist
                 if let Some(missing_uid) = uids.iter().find(|uid| !metadata.contains_key(*uid)) {
                     return Ok(GetModelsInfoResponse {
                         models: vec![],
@@ -299,20 +330,21 @@ impl Inference for ZBotInference {
                     });
                 }
 
-                // If all exist, map them to ModelInfo
                 uids.iter()
                     .map(|uid| ModelInfo {
                         uid: uid.clone(),
-                        metadata: metadata.get(uid).cloned().unwrap_or_default(),
+                        metadata: Some(ModelMetadata::from(metadata.get(uid)
+                            .cloned()
+                            .unwrap_or_default())),
                     })
                     .collect()
             }
             Some(filter::Filter::All(_)) | None => {
                 metadata
-                    .keys()
-                    .map(|uid| ModelInfo {
+                    .iter()
+                    .map(|(uid, meta)| ModelInfo {
                         uid: uid.clone(),
-                        metadata: metadata.get(uid).cloned().unwrap_or_default(),
+                        metadata: Some(ModelMetadata::from(meta.clone())),
                     })
                     .collect()
             }
