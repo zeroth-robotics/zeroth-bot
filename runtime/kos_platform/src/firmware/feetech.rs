@@ -140,9 +140,19 @@ impl FeetechSupervisor {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(5)); // 200hz
             let mut stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(5)); // 5 seconds
+            let mut voice_stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(20));
 
             // Stats tracking
             let mut accumulated_stats = ServoInfoBuffer {
+                retry_count: 0,
+                read_count: 0,
+                loop_count: 0,
+                fault_count: 0,
+                last_read_ms: 0,
+                servos: unsafe { std::mem::zeroed() },
+            };
+
+            let mut accumulated_voice_stats = ServoInfoBuffer {
                 retry_count: 0,
                 read_count: 0,
                 loop_count: 0,
@@ -163,6 +173,12 @@ impl FeetechSupervisor {
                         accumulated_stats.read_count += info_buffer.read_count;
                         accumulated_stats.loop_count += info_buffer.loop_count;
                         accumulated_stats.fault_count += info_buffer.fault_count;
+
+                        // Accumulate voice stats
+                        accumulated_voice_stats.retry_count += info_buffer.retry_count;
+                        accumulated_voice_stats.read_count += info_buffer.read_count;
+                        accumulated_voice_stats.loop_count += info_buffer.loop_count;
+                        accumulated_voice_stats.fault_count += info_buffer.fault_count;
 
                         let mut servos = supervisor_clone.servos.write().await;
                         for servo in &info_buffer.servos {
@@ -187,6 +203,21 @@ impl FeetechSupervisor {
                         accumulated_stats.read_count = 0;
                         accumulated_stats.loop_count = 0;
                         accumulated_stats.fault_count = 0;
+                    }
+                    _ = voice_stats_interval.tick() => {
+                        // do tts
+                        let tts_text = format!("Retries: {}, Faults: {}",
+                            accumulated_voice_stats.retry_count,
+                            accumulated_voice_stats.fault_count);
+                        tokio::spawn(async move {
+                            let _ = std::process::Command::new("chroot")
+                                .arg("/root/alpine")
+                                .arg("espeak-ng")
+                                .arg(tts_text)
+                                .arg("-d")
+                                .arg("hw:1,0")
+                                .spawn();
+                        });
                     }
                 }
             }
