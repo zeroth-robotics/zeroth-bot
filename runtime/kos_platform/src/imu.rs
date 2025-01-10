@@ -166,8 +166,4 @@ impl IMU for ZBotIMU {
             }
         }
     }
-
-    async fn get_advanced_values(&self) -> Result<ImuAdvancedValuesResponse> {
-        unimplemented!("Advanced IMU values are not supported on this platform");
-    }
 }
