@@ -1,293 +1,346 @@
-use crate::hal::{
-    MemoryLockState, ServoData, ServoDirection, ServoInfo, ServoMode, ServoMultipleWriteCommand,
-    ServoRegister, TorqueMode, MAX_SERVOS,
-};
+use super::feetech_servo::Sts3215;
 use eyre::Result;
+use std::collections::HashMap;
 use std::fmt;
 use std::os::raw::{c_int, c_short, c_uchar, c_uint, c_ushort};
 use std::sync::{Arc, Mutex};
+use tokio::sync::RwLock;
+use tracing::info;
+const MAX_SERVO_COMMAND_DATA: usize = 40;
+const MAX_SHMEM_DATA: usize = 2048;
+const MAX_SERVOS: usize = 32;
 
-#[link(name = "sts3215")]
+#[repr(C)]
+#[derive(Debug)]
+pub struct ServoInfo {
+    pub id: c_uchar,
+    pub last_read_ms: c_uint,
+    pub torque_switch: c_uchar,
+    pub acceleration: c_uchar,
+    pub target_location: c_short,
+    pub running_time: c_ushort,
+    pub running_speed: c_ushort,
+    pub torque_limit: c_ushort,
+    pub reserved1: [c_uchar; 6],
+    pub lock_mark: c_uchar,
+    pub current_location: c_short,
+    pub current_speed: c_short,
+    pub current_load: c_short,
+    pub current_voltage: c_uchar,
+    pub current_temperature: c_uchar,
+    pub async_write_flag: c_uchar,
+    pub servo_status: c_uchar,
+    pub mobile_sign: c_uchar,
+    pub reserved2: [c_uchar; 2],
+    pub current_current: c_ushort,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct ServoInfoBuffer {
+    pub retry_count: c_uint,
+    pub read_count: c_uint,
+    pub loop_count: c_uint,
+    pub fault_count: c_uint,
+    pub last_read_ms: c_uint,
+    pub servos: [ServoInfo; MAX_SERVOS],
+}
+
+#[repr(C)]
+pub struct ActiveServoList {
+    pub len: c_uint,
+    pub servo_id: [c_uchar; MAX_SERVOS],
+}
+
+#[repr(C)]
+pub struct ShmemData {
+    pub data_length: c_uint,
+    pub data: [c_uchar; MAX_SHMEM_DATA],
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct BroadcastCommand {
+    pub data_length: c_uint,
+    pub data: [c_uchar; MAX_SHMEM_DATA],
+}
+
+#[link(name = "feetech")]
 extern "C" {
     fn servo_init() -> c_int;
     fn servo_deinit();
     fn servo_write(id: c_uchar, address: c_uchar, data: *const c_uchar, length: c_uchar) -> c_int;
     fn servo_read(id: c_uchar, address: c_uchar, length: c_uchar, data: *mut c_uchar) -> c_int;
-    fn servo_move(id: c_uchar, position: c_short, time: c_ushort, speed: c_ushort) -> c_int;
-    fn enable_servo_readout() -> c_int;
-    fn disable_servo_readout() -> c_int;
-    fn enable_servo_movement() -> c_int;
-    fn disable_servo_movement() -> c_int;
-    fn set_servo_mode(id: c_uchar, mode: c_uchar) -> c_int;
-    fn set_servo_speed(id: c_uchar, speed: c_ushort, direction: c_int) -> c_int;
-    fn servo_read_info(id: c_uchar, info: *mut ServoInfo) -> c_int;
-    fn read_servo_positions(servo_data: *mut ServoData) -> c_int;
-    fn servo_write_multiple(cmd: *const ServoMultipleWriteCommand) -> c_int;
+    fn servo_set_active_servos(active_servos: ActiveServoList) -> c_int;
+    fn servo_get_info(info_buffer: *mut ServoInfoBuffer) -> c_int;
+    fn servo_broadcast_command(command: BroadcastCommand) -> c_int;
 }
 
-#[derive(Debug)]
-pub struct Servo {
-    _private: (), // Prevent direct construction
+#[derive(Debug, Clone, Copy)]
+pub enum FeetechActuatorType {
+    Sts3215,
 }
 
-impl Servo {
+#[derive(Debug, Clone, Copy, Default)]
+pub struct FeetechActuatorInfo {
+    pub id: u8,
+    pub torque_enabled: bool,
+    pub position_deg: f32,
+    pub speed_deg_per_s: f32,
+    pub load_percent: f32,
+    pub voltage_v: f32,
+    pub current_ma: f32,
+    pub temperature_c: f32,
+}
+
+pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
+    fn id(&self) -> u8;
+    fn info(&self) -> FeetechActuatorInfo;
+    fn set_position(&mut self, position_deg: f32);
+    fn set_speed(&mut self, speed_deg_per_s: f32);
+    fn enable_torque(&mut self);
+    fn disable_torque(&mut self);
+    fn change_id(&mut self, id: u8);
+    fn update_info(&mut self, info: &ServoInfo);
+    fn degrees_to_raw(&self, degrees: f32) -> u16;
+    fn raw_to_degrees(&self, raw: u16) -> f32;
+    fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>);
+}
+
+#[derive(Debug, Clone)]
+pub struct FeetechSupervisor {
+    pub servos: Arc<RwLock<HashMap<u8, Box<dyn FeetechActuator>>>>,
+    pub actuator_desired_positions: HashMap<u8, f32>,
+}
+
+impl FeetechSupervisor {
     pub fn new() -> Result<Self> {
-        let result = unsafe { servo_init() };
-        if result != 0 {
-            eyre::bail!("Failed to initialize servo");
+        unsafe {
+            if servo_init() != 0 {
+                return Err(eyre::eyre!("Failed to initialize servo system"));
+            }
         }
-        Ok(Servo { _private: () })
-    }
 
-    pub fn write(&self, id: u8, register: ServoRegister, data: &[u8]) -> Result<()> {
-        let _result = unsafe {
-            servo_write(
-                id,
-                register.clone() as u8,
-                data.as_ptr(),
-                data.len() as c_uchar,
-            )
+        let supervisor = Self {
+            servos: Arc::new(RwLock::new(HashMap::new())),
+            actuator_desired_positions: HashMap::new(),
         };
-        let result =
-            unsafe { servo_write(id, register as u8, data.as_ptr(), data.len() as c_uchar) };
 
-        if result != 0 {
-            eyre::bail!("Failed to write to servo");
+        let supervisor_clone = supervisor.clone();
+
+        let mut info_buffer = ServoInfoBuffer {
+            retry_count: 0,
+            read_count: 0,
+            loop_count: 0,
+            fault_count: 0,
+            last_read_ms: 0,
+            servos: unsafe { std::mem::zeroed() },
+        };
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(5)); // 200hz
+            let mut stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(5)); // 5 seconds
+
+            // Stats tracking
+            let mut accumulated_stats = ServoInfoBuffer {
+                retry_count: 0,
+                read_count: 0,
+                loop_count: 0,
+                fault_count: 0,
+                last_read_ms: 0,
+                servos: unsafe { std::mem::zeroed() },
+            };
+
+            loop {
+                tokio::select! {
+                    _ = interval.tick() => {
+                        unsafe {
+                            servo_get_info(&mut info_buffer);
+                        }
+
+                        // Accumulate stats
+                        accumulated_stats.retry_count += info_buffer.retry_count;
+                        accumulated_stats.read_count += info_buffer.read_count;
+                        accumulated_stats.loop_count += info_buffer.loop_count;
+                        accumulated_stats.fault_count += info_buffer.fault_count;
+
+                        let mut servos = supervisor_clone.servos.write().await;
+                        for servo in &info_buffer.servos {
+                            if servo.id != 0 {
+                                if let Some(actuator) = servos.get_mut(&servo.id) {
+                                    actuator.update_info(servo);
+                                }
+                            }
+                        }
+                    }
+                    _ = stats_interval.tick() => {
+                        info!(
+                            "Servo Stats (5s) - Retries: {}, Reads: {}, Loops: {}, Faults: {}",
+                            accumulated_stats.retry_count,
+                            accumulated_stats.read_count,
+                            accumulated_stats.loop_count,
+                            accumulated_stats.fault_count
+                        );
+
+                        // Reset accumulated stats
+                        accumulated_stats.retry_count = 0;
+                        accumulated_stats.read_count = 0;
+                        accumulated_stats.loop_count = 0;
+                        accumulated_stats.fault_count = 0;
+                    }
+                }
+            }
+        });
+
+        Ok(supervisor)
+    }
+
+    pub async fn update_active_servos(&mut self) -> Result<()> {
+        let servos = self.servos.write().await;
+        let servo_ids = servos.iter().map(|(id, _)| *id).collect::<Vec<_>>();
+
+        // Create ActiveServoList with proper initialization
+        let mut active_servos = ActiveServoList {
+            len: servo_ids.len() as c_uint,
+            servo_id: [0; MAX_SERVOS],
+        };
+
+        // Copy the IDs into the fixed-size array
+        for (i, &id) in servo_ids.iter().enumerate() {
+            if i >= MAX_SERVOS {
+                break;
+            }
+            active_servos.servo_id[i] = id as c_uchar;
+        }
+
+        unsafe {
+            if servo_set_active_servos(active_servos) != 0 {
+                return Err(eyre::eyre!("Failed to set active servos"));
+            }
         }
         Ok(())
     }
 
-    pub fn read(&self, id: u8, register: ServoRegister, length: u8) -> Result<Vec<u8>> {
-        let mut data = vec![0u8; length as usize];
-        let result = unsafe { servo_read(id, register as u8, length, data.as_mut_ptr()) };
-        if result != 0 {
-            eyre::bail!("Failed to read from servo");
-        }
-        Ok(data)
-    }
-
-    pub fn move_servo(&self, id: u8, position: i16, time: u16, speed: u16) -> Result<()> {
-        let result = unsafe { servo_move(id, position, time, speed) };
-        if result != 0 {
-            eyre::bail!("Failed to move servo");
-        }
+    pub async fn add_servo(&mut self, id: u8, actuator_type: FeetechActuatorType) -> Result<()> {
+        let mut servos = self.servos.write().await;
+        let actuator = match actuator_type {
+            FeetechActuatorType::Sts3215 => Sts3215::new(id),
+        };
+        servos.insert(id, Box::new(actuator));
+        drop(servos);
+        self.update_active_servos().await?;
         Ok(())
     }
 
-    pub fn enable_readout(&self) -> Result<()> {
-        let result = unsafe { enable_servo_readout() };
-        if result != 0 {
-            eyre::bail!("Failed to enable servo readout");
-        }
+    pub async fn remove_servo(&mut self, id: u8) -> Result<()> {
+        let mut servos = self.servos.write().await;
+        servos.remove(&id);
+        drop(servos);
+        self.update_active_servos().await?;
         Ok(())
     }
 
-    pub fn disable_readout(&self) -> Result<()> {
-        let result = unsafe { disable_servo_readout() };
-        if result != 0 {
-            eyre::bail!("Failed to disable servo readout");
+    pub async fn move_actuators(&mut self, desired_positions: &HashMap<u8, f32>) -> Result<()> {
+        for (id, position) in desired_positions {
+            self.actuator_desired_positions.insert(*id, *position);
         }
+
+        self.broadcast_command().await?;
+
         Ok(())
     }
 
-    pub fn enable_movement(&self) -> Result<()> {
-        let result = unsafe { enable_servo_movement() };
-        if result != 0 {
-            eyre::bail!("Failed to enable servo movement");
-        }
+    pub async fn disable_torque(&mut self, id: u8) -> Result<()> {
+        {
+            // New scope to ensure servos lock is dropped
+            let mut servos = self.servos.write().await;
+            servos.get_mut(&id).unwrap().disable_torque();
+        } // servos lock is dropped here
+        self.broadcast_command().await?;
         Ok(())
     }
 
-    pub fn disable_movement(&self) -> Result<()> {
-        let result = unsafe { disable_servo_movement() };
-        if result != 0 {
-            eyre::bail!("Failed to disable servo movement");
-        }
+    pub async fn enable_torque(&mut self, id: u8) -> Result<()> {
+        {
+            // New scope to ensure servos lock is dropped
+            let mut servos = self.servos.write().await;
+            servos.get_mut(&id).unwrap().enable_torque();
+            self.actuator_desired_positions.remove(&id);
+        } // servos lock is dropped here
+        self.broadcast_command().await?;
         Ok(())
     }
 
-    pub fn set_mode(&self, id: u8, mode: ServoMode) -> Result<()> {
-        let result = unsafe { set_servo_mode(id, mode as u8) };
-        if result != 0 {
-            eyre::bail!("Failed to set servo mode");
+    pub async fn broadcast_command(&mut self) -> Result<()> {
+        let mut command = BroadcastCommand {
+            data_length: 0,
+            data: [0; MAX_SHMEM_DATA],
+        };
+
+        const SERVO_ADDR_TARGET_POSITION: u8 = 0x2A;
+        let mut index = 0;
+
+        // Write header
+        command.data[index] = SERVO_ADDR_TARGET_POSITION;
+        index += 1;
+        command.data[index] = 2; // Data length per servo (2 for position only)
+        index += 1;
+
+        let servos = self.servos.read().await;
+
+        // Write data for each servo
+        for (id, position) in &self.actuator_desired_positions {
+            if let Some(servo) = servos.get(id) {
+                if servo.info().torque_enabled {
+                    let position_raw = servo.degrees_to_raw(*position);
+
+                    command.data[index] = *id;
+                    index += 1;
+                    command.data[index] = (position_raw & 0xFF) as u8;
+                    index += 1;
+                    command.data[index] = ((position_raw >> 8) & 0xFF) as u8;
+                    index += 1;
+                }
+            }
         }
+
+        command.data_length = index as c_uint;
+
+        unsafe {
+            if servo_broadcast_command(command) != 0 {
+                return Err(eyre::eyre!("Failed to broadcast command"));
+            }
+        }
+
         Ok(())
     }
 
-    pub fn set_speed(&self, id: u8, speed: u16, direction: ServoDirection) -> Result<()> {
-        let direction = if direction == ServoDirection::Clockwise {
-            1
+    pub async fn change_id(&mut self, id: u8, new_id: u8) -> Result<()> {
+        let mut servos = self.servos.write().await;
+        if let Some(servo) = servos.get_mut(&id) {
+            servo.change_id(new_id);
+            Ok(())
         } else {
-            -1
-        };
-        let result = unsafe { set_servo_speed(id, speed, direction as i32) };
-        if result != 0 {
-            eyre::bail!("Failed to set servo speed");
+            let mut new_servo = Box::new(Sts3215::new(id));
+            new_servo.change_id(new_id);
+            Ok(())
         }
-        Ok(())
-    }
-
-    pub fn read_info(&self, id: u8) -> Result<ServoInfo> {
-        let mut info = ServoInfo {
-            torque_switch: 0,
-            acceleration: 0,
-            target_location: 0,
-            running_time: 0,
-            running_speed: 0,
-            torque_limit: 0,
-            reserved1: [0; 6],
-            lock_mark: 0,
-            current_location: 0,
-            current_speed: 0,
-            current_load: 0,
-            current_voltage: 0,
-            current_temperature: 0,
-            async_write_flag: 0,
-            servo_status: 0,
-            mobile_sign: 0,
-            reserved2: [0; 2],
-            current_current: 0,
-        };
-        let result = unsafe { servo_read_info(id, &mut info) };
-        if result != 0 {
-            eyre::bail!("Failed to read servo info");
-        }
-        Ok(info)
-    }
-
-    pub fn read_continuous(&self) -> Result<ServoData> {
-        let mut data = ServoData {
-            servo: [ServoInfo {
-                torque_switch: 0,
-                acceleration: 0,
-                target_location: 0,
-                running_time: 0,
-                running_speed: 0,
-                torque_limit: 0,
-                reserved1: [0; 6],
-                lock_mark: 0,
-                current_location: 0,
-                current_speed: 0,
-                current_load: 0,
-                current_voltage: 0,
-                current_temperature: 0,
-                async_write_flag: 0,
-                servo_status: 0,
-                mobile_sign: 0,
-                reserved2: [0; 2],
-                current_current: 0,
-            }; MAX_SERVOS],
-            task_run_count: 0,
-        };
-        let result = unsafe { read_servo_positions(&mut data) };
-        if result != 0 {
-            eyre::bail!("Failed to read continuous servo data");
-        }
-        Ok(data)
-    }
-
-    pub fn write_multiple(&self, cmd: &ServoMultipleWriteCommand) -> Result<()> {
-        let result = unsafe { servo_write_multiple(cmd) };
-        if result != 0 {
-            eyre::bail!("Failed to write multiple servo positions");
-        }
-        Ok(())
-    }
-
-    pub fn read_pid(&self, id: u8) -> Result<(u8, u8, u8)> {
-        let p = self.read(id, ServoRegister::PProportionalCoeff, 1)?[0];
-        let i = self.read(id, ServoRegister::IIntegralCoeff, 1)?[0];
-        let d = self.read(id, ServoRegister::DDifferentialCoeff, 1)?[0];
-        Ok((p, i, d))
-    }
-
-    pub fn set_pid(&self, id: u8, p: u8, i: u8, d: u8) -> Result<()> {
-        // Unlock flash
-        self.write(
-            id,
-            ServoRegister::LockMark,
-            &[MemoryLockState::Unlocked as u8],
-        )?;
-
-        // Set PID parameters
-        self.write(id, ServoRegister::PProportionalCoeff, &[p])?;
-        self.write(id, ServoRegister::IIntegralCoeff, &[i])?;
-        self.write(id, ServoRegister::DDifferentialCoeff, &[d])?;
-
-        // Lock flash
-        self.write(
-            id,
-            ServoRegister::LockMark,
-            &[MemoryLockState::Locked as u8],
-        )?;
-
-        Ok(())
-    }
-
-    pub fn set_memory_lock(&self, id: u8, state: MemoryLockState) -> Result<()> {
-        self.write(id, ServoRegister::LockMark, &[state as u8])
-    }
-
-    pub fn read_angle_limits(&self, id: u8) -> Result<(i16, i16)> {
-        let min_limit = i16::from_le_bytes(
-            self.read(id, ServoRegister::MinAngleLimit, 2)?
-                .try_into()
-                .unwrap(),
-        );
-        let max_limit = i16::from_le_bytes(
-            self.read(id, ServoRegister::MaxAngleLimit, 2)?
-                .try_into()
-                .unwrap(),
-        );
-        Ok((min_limit, max_limit))
-    }
-
-    pub fn set_torque_mode(&self, id: u8, mode: TorqueMode) -> Result<()> {
-        self.write(id, ServoRegister::TorqueSwitch, &[mode as u8])
-    }
-
-    pub fn write_servo_memory(&self, id: u8, register: ServoRegister, value: u16) -> Result<()> {
-        let data = [(value & 0xFF) as u8, ((value >> 8) & 0xFF) as u8];
-        self.write(id, register, &data)
-    }
-
-    pub fn scan(&self, id: u8) -> Result<bool> {
-        // Try to read the servo ID from memory address 0x5 (ServoRegister::ID)
-        match self.read(id, ServoRegister::ID, 1) {
-            Ok(data) if data.len() == 1 && data[0] == id => Ok(true),
-            Ok(_) => Ok(false),  // Received data, but it doesn't match the ID
-            Err(_) => Ok(false), // No response, assume no servo at this ID
-        }
-    }
-
-    pub fn degrees_to_raw(degrees: f32) -> u16 {
-        // Ensure the input is within the valid range
-        let clamped_degrees = degrees.max(-180.0).min(180.0);
-
-        // Convert degrees to raw value
-        let raw = (clamped_degrees + 180.0) / 360.0 * 4096.0;
-
-        // Round to nearest integer and ensure it's within the valid range
-        raw.round().max(0.0).min(4095.0) as u16
-    }
-
-    pub fn raw_to_degrees(raw: u16) -> f32 {
-        // Ensure the input is within the valid range
-        let clamped_raw = raw.max(0).min(4095);
-
-        // Convert raw value to degrees
-        let degrees = (clamped_raw as f32 / 4096.0) * 360.0 - 180.0;
-
-        // Round to two decimal places
-        (degrees * 100.0).round() / 100.0;
-
-        // clamp to -180.0 to 180.0
-        degrees.max(-180.0).min(180.0)
     }
 }
 
-impl Drop for Servo {
+impl Drop for FeetechSupervisor {
     fn drop(&mut self) {
-        unsafe { servo_deinit() };
+        unsafe {
+            servo_deinit();
+        }
     }
+}
+
+pub fn feetech_write(id: u8, address: u8, data: &[u8]) -> Result<()> {
+    unsafe {
+        if servo_write(id, address, data.as_ptr(), data.len() as u8) != 0 {
+            return Err(eyre::eyre!("Failed to write to servo"));
+        }
+    }
+    Ok(())
 }

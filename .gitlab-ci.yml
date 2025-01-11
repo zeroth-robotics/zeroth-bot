@@ -68,11 +68,11 @@ build-servo:
   stage: build-runtime
   image: $TOOLCHAIN_IMAGE:latest
   script:
-    - cd runtime/firmware/sts3215
+    - cd runtime/firmware/feetech
     - make
   artifacts:
     paths:
-      - runtime/firmware/sts3215/libsts3215.so
+      - runtime/firmware/feetech/libfeetech.so
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
@@ -98,37 +98,37 @@ build-efuse:
         - runtime/**/*
         - .gitlab-ci.yml
 
-build-runtime:
-  <<: *runner
-  stage: build-runtime
-  image: $TOOLCHAIN_IMAGE:latest
-  needs:
-    - build-cviwrapper
-    - build-servo
-  script:
-    - cd runtime
-    - source /root/.cargo/env
-    - cargo +nightly build --features milkv --no-default-features --target riscv64gc-unknown-linux-musl -Zbuild-std --release
+# build-runtime:
+#   <<: *runner
+#   stage: build-runtime
+#   image: $TOOLCHAIN_IMAGE:latest
+#   needs:
+#     - build-cviwrapper
+#     - build-servo
+#   script:
+#     - cd runtime
+#     - source /root/.cargo/env
+#     - cargo +nightly build --features milkv --no-default-features --target riscv64gc-unknown-linux-musl -Zbuild-std --release
 
-  artifacts:
-    paths:
-      - runtime/target/riscv64gc-unknown-linux-musl/release/
-    exclude:
-      - runtime/target/riscv64gc-unknown-linux-musl/release/**/*.d
-      - runtime/target/riscv64gc-unknown-linux-musl/release/**/*.rlib
-      - runtime/target/riscv64gc-unknown-linux-musl/release/build
-      - runtime/target/riscv64gc-unknown-linux-musl/release/build/**/*
-      - runtime/target/riscv64gc-unknown-linux-musl/release/deps
-      - runtime/target/riscv64gc-unknown-linux-musl/release/deps/**/*
-      - runtime/target/riscv64gc-unknown-linux-musl/release/.fingerprint
-      - runtime/target/riscv64gc-unknown-linux-musl/release/.fingerprint/**/*
-      - runtime/target/riscv64gc-unknown-linux-musl/release/.cargo-lock
-    expire_in: 1 week
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "push"
-      changes:
-        - runtime/**/*
-        - .gitlab-ci.yml
+#   artifacts:
+#     paths:
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/
+#     exclude:
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/**/*.d
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/**/*.rlib
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/build
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/build/**/*
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/deps
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/deps/**/*
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/.fingerprint
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/.fingerprint/**/*
+#       - runtime/target/riscv64gc-unknown-linux-musl/release/.cargo-lock
+#     expire_in: 1 week
+#   rules:
+#     - if: $CI_PIPELINE_SOURCE == "push"
+#       changes:
+#         - runtime/**/*
+#         - .gitlab-ci.yml
 
 build-kos:
   <<: *runner
@@ -140,7 +140,7 @@ build-kos:
   variables:
     CC_riscv64gc_unknown_linux_musl: "/sdk/host/bin/riscv64-buildroot-linux-musl-gcc.br_real"
   script:
-    - git clone https://github.com/kscalelabs/kos.git --depth 1
+    - git clone https://github.com/kscalelabs/kos.git --depth 1 --branch zbot-feetechv2
     - cd kos
     - rm -rf platforms/zeroth-01; ln -s $PWD/../runtime/kos_platform platforms/zeroth-01
     - source /root/.cargo/env
