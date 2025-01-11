@@ -140,7 +140,7 @@ build-kos:
   variables:
     CC_riscv64gc_unknown_linux_musl: "/sdk/host/bin/riscv64-buildroot-linux-musl-gcc.br_real"
   script:
-    - git clone https://github.com/kscalelabs/kos.git --depth 1 --branch zbot-feetechv2
+    - git clone https://github.com/kscalelabs/kos.git --depth 1 --branch inference-service
     - cd kos
     - rm -rf platforms/zeroth-01; ln -s $PWD/../runtime/kos_platform platforms/zeroth-01
     - source /root/.cargo/env

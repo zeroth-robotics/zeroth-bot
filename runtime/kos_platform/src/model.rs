@@ -2,6 +2,7 @@ use crate::Model;
 use eyre::Result;
 use kos_core::hal::Inference;
 use kos_core::kos_proto::inference::*;
+use kos_core::kos_proto::common::ErrorCode;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -13,6 +14,10 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use serde::{Serialize, Deserialize};
+use fs2::available_space;
+use kos_core::kos_proto::common::{ActionResponse, Error};
+use kos_core::kos_proto::inference::get_models_info_request::Filter;
+use kos_core::kos_proto::inference::ModelUids;
 
 const MODELS_DIR: &'static str = "/opt/models";
 const METADATA_FILE: &'static str = "/opt/models/metadata.json";
@@ -47,27 +52,39 @@ impl From<SerializableModelMetadata> for ModelMetadata {
     }
 }
 
+impl Default for SerializableModelMetadata {
+    fn default() -> Self {
+        Self {
+            model_name: None,
+            model_description: None,
+            model_version: None,
+            model_author: None,
+        }
+    }
+}
+
 pub struct ZBotInference {
     loaded_models: Arc<RwLock<HashMap<String, Model>>>,
     available_models: Arc<RwLock<HashMap<String, SerializableModelMetadata>>>,
 }
 
 impl ZBotInference {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self> {
         let inference = Self {
             loaded_models: Arc::new(RwLock::new(HashMap::new())),
             available_models: Arc::new(RwLock::new(HashMap::new())),
         };
 
-        // Load metadata in a blocking task to avoid async in new()
-        let inference_clone = inference.clone();
-        tokio::spawn(async move {
-            if let Err(e) = inference_clone.load_metadata().await {
-                error!("Failed to load metadata: {}", e);
-            }
+        // Load metadata directly
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                if let Err(e) = inference.load_metadata().await {
+                    error!("Failed to load metadata: {}", e);
+                }
+            })
         });
 
-        inference
+        Ok(inference)
     }
 
     fn generate_model_uid() -> String {
@@ -136,40 +153,40 @@ impl ZBotInference {
         let metadata_json = serde_json::to_string_pretty(&*metadata)
             .map_err(|e| eyre::eyre!("Failed to serialize metadata: {}", e))?;
 
-        let temp_path = Path::new(&Self::METADATA_FILE).with_extension("tmp");
+        let temp_path = Path::new(METADATA_FILE).with_extension("tmp");
         
         // Write to temporary file first
         fs::write(&temp_path, metadata_json)
             .map_err(|e| eyre::eyre!("Failed to write metadata file: {}", e))?;
         
         // Atomically rename temporary file to actual file
-        fs::rename(&temp_path, Self::METADATA_FILE)
+        fs::rename(&temp_path, METADATA_FILE)
             .map_err(|e| eyre::eyre!("Failed to save metadata file: {}", e))?;
 
-        debug!("Successfully saved metadata to {}", Self::METADATA_FILE);
+        debug!("Successfully saved metadata to {}", METADATA_FILE);
         Ok(())
     }
 
     async fn load_metadata(&self) -> Result<()> {
-        if !Path::new(Self::METADATA_FILE).exists() {
-            debug!("No metadata file found at {}", Self::METADATA_FILE);
+        if !Path::new(METADATA_FILE).exists() {
+            debug!("No metadata file found at {}", METADATA_FILE);
             return Ok(());
         }
 
-        let metadata_str = fs::read_to_string(Self::METADATA_FILE)
+        let metadata_str = fs::read_to_string(METADATA_FILE)
             .map_err(|e| eyre::eyre!("Failed to read metadata file: {}", e))?;
 
-        let metadata: HashMap<String, ModelMetadata> = serde_json::from_str(&metadata_str)
+        let metadata: HashMap<String, SerializableModelMetadata> = serde_json::from_str(&metadata_str)
             .map_err(|e| eyre::eyre!("Failed to parse metadata file: {}", e))?;
 
         let mut available = self.available_models.write().await;
         *available = metadata;
 
-        debug!("Successfully loaded metadata from {}", Self::METADATA_FILE);
+        debug!("Successfully loaded metadata from {}", METADATA_FILE);
         Ok(())
     }
 
-    async fn load_model(&self, uid: &str, path: PathBuf) -> Result<Model> {
+    async fn load_model(&self, uid: &str, path: PathBuf) -> Result<()> {
         // Load model outside of lock
         let model = Model::new(path)?;
         
@@ -180,7 +197,7 @@ impl ZBotInference {
             return Err(eyre::eyre!("Model {} already loaded", uid));
         }
         models.insert(uid.to_string(), model);
-        Ok(model)
+        Ok(())
     }
 }
 
@@ -200,12 +217,12 @@ impl Inference for ZBotInference {
             .ok_or_else(|| eyre::eyre!("Invalid model path"))?
             .to_string();
 
-        self.register_model(model_uid, metadata.unwrap_or_default()).await?;
+        self.register_model(model_uid.clone(), metadata.unwrap_or_default()).await?;
         
-        self.load_models(vec![model_uid]).await?;
+        self.load_models(vec![model_uid.clone()]).await?;
         
         Ok(UploadModelResponse {
-            model_uid,
+            model_uid: model_uid,
             error: None,
         })
     }
@@ -220,16 +237,15 @@ impl Inference for ZBotInference {
         if let Some(uid) = missing_uid {
             return Ok(LoadModelsResponse {
                 models: vec![],
-                result: ActionResponse {
+                result: Some(ActionResponse {
                     success: false,
-                    error: Some(kos_core::kos_proto::common::Error {
-                        code: kos_core::kos_proto::common::ErrorCode::NotFound as i32,
+                    error: Some(Error {
+                        code: ErrorCode::InvalidArgument as i32,
                         message: format!("Model {} not registered", uid),
                     }),
-                },
+                }),
             });
         }
-
         drop(available);
         
         let mut failed_uids = Vec::new();
@@ -251,8 +267,8 @@ impl Inference for ZBotInference {
                 continue;
             }
 
-            match self.load_model(uid, model_path).await {
-                Ok(model) => {
+            match self.load_model(&uid, model_path).await {
+                Ok(_) => {
                     debug!("Loaded model {}", uid);
                 }
                 Err(e) => {
@@ -264,15 +280,19 @@ impl Inference for ZBotInference {
 
         if !failed_uids.is_empty() {
             return Ok(LoadModelsResponse {
-                success: false,
-                error: Some(Error {
-                    code: ErrorCode::NotFound as i32,
-                    message: format!("Failed to load models: {}", failed_uids.join(", ")),
+                models: vec![],
+                result: Some(ActionResponse {
+                    success: false,
+                    error: Some(Error {
+                        code: ErrorCode::InvalidArgument as i32,
+                        message: format!("Failed to load models: {}", failed_uids.join(", ")),
+                    }),
                 }),
             });
         }
 
         let models = self.loaded_models.read().await;
+        let available = self.available_models.read().await;
         
         Ok(LoadModelsResponse {
             models: models
@@ -282,10 +302,10 @@ impl Inference for ZBotInference {
                     metadata: Some(ModelMetadata::from(available.get(uid).cloned().unwrap_or_default())),
                 })
                 .collect(),
-            result: ActionResponse {
+            result: Some(ActionResponse {
                 success: true,
                 error: None,
-            },
+            }),
         })
     }
 
@@ -300,8 +320,8 @@ impl Inference for ZBotInference {
             } else {
                 return Ok(ActionResponse {
                     success: false,
-                    error: Some(kos_core::kos_proto::common::Error {
-                        code: kos_core::kos_proto::common::ErrorCode::NotFound as i32,
+                    error: Some(Error {
+                        code: ErrorCode::InvalidArgument as i32,
                         message: format!("Model {} not found", uid),
                     }),
                 });
@@ -319,12 +339,12 @@ impl Inference for ZBotInference {
         let metadata = self.available_models.read().await;
         
         let model_infos = match request.filter {
-            Some(filter::Filter::ModelUids(ModelUids { uids })) => {
+            Some(Filter::ModelUids(ModelUids { uids })) => {
                 if let Some(missing_uid) = uids.iter().find(|uid| !metadata.contains_key(*uid)) {
                     return Ok(GetModelsInfoResponse {
                         models: vec![],
-                        error: Some(kos_core::kos_proto::common::Error {
-                            code: kos_core::kos_proto::common::ErrorCode::NotFound as i32,
+                        error: Some(Error {
+                            code: ErrorCode::InvalidArgument as i32,
                             message: format!("Model {} not found", missing_uid),
                         }),
                     });
@@ -339,7 +359,7 @@ impl Inference for ZBotInference {
                     })
                     .collect()
             }
-            Some(filter::Filter::All(_)) | None => {
+            Some(Filter::All(_)) | None => {
                 metadata
                     .iter()
                     .map(|(uid, meta)| ModelInfo {
@@ -379,8 +399,8 @@ impl Inference for ZBotInference {
         } else {
             Ok(ForwardResponse {
                 outputs: vec![],
-                error: Some(kos_core::kos_proto::common::Error {
-                    code: kos_core::kos_proto::common::ErrorCode::NotFound as i32,
+                error: Some(Error {
+                    code: ErrorCode::InvalidArgument as i32,
                     message: format!("Model {} not found", model_uid),
                 }),
             })
