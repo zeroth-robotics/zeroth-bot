@@ -1,11 +1,12 @@
 mod actuator;
 mod firmware;
 mod imu;
+mod inference; 
 
 pub use actuator::*;
 pub use firmware::*;
 pub use imu::*;
-
+pub use inference::*;
 use kos_core::kos_proto::actuator::actuator_service_server::ActuatorServiceServer;
 use kos_core::kos_proto::imu::imu_service_server::ImuServiceServer;
 use kos_core::services::{ActuatorServiceImpl, IMUServiceImpl, OperationsServiceImpl};
@@ -65,6 +66,11 @@ impl Platform for ZBotPlatform {
                     eprintln!("Failed to initialize IMU: {}", e);
                 }
             }
+
+            let inference = ZBotInference::new(imu, actuator);
+            services.push(ServiceEnum::Inference(InferenceServiceServer::new(
+                InferenceServiceImpl::new(Arc::new(inference)),
+            )));
 
             Ok(services)
         })
