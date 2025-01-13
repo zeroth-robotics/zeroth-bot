@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     let robot = Robot::new().context("Failed to initialize robot")?;
 
     // load model
-    let model_path = PathBuf::from("/root/models/ppo_standing_sin_cos.cvimodel"); // PATH IN MILK-V
+    let model_path = PathBuf::from("/root/models/ppo_walking.cvimodel"); // PATH IN MILK-V
     let model = Model::new(model_path).context("Failed to load model")?;
     let model_arc = Arc::new(model);
 
