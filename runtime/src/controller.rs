@@ -9,66 +9,109 @@ use ndarray::Array1;
 pub struct Robot{
 
     servo: Servo,
+    cycle_time: f32,
+    prev_actions: [f32; 10],
+    prev_buffer: [f32; 615],
 }
 
 impl Robot{
     pub fn new() -> Result<Self> {
         let servo = Servo::new()?;
 
-        Ok(Self { servo })
+        Ok(Self { servo, cycle_time: 0.5, prev_actions: [0.0; 10], prev_buffer: [0.0; 615] })
     }
 
-    pub async fn run(&self, model: Arc<Model>) -> Result<()> {
+    pub async fn run(&mut self, model: Arc<Model>) -> Result<()> {
         let mut control_interval = interval(Duration::from_millis(20));
 
         loop {
             control_interval.tick().await;
 
             // get joint states
-            let current_joint_states = self.get_joint_states().await?;
+            let model_input = self.get_robot_state().await?;
             
             // get desired joint positions (inferenced from model)
-            let desired_joint_positions = self.model_inference(&model, &current_joint_states).await?;
+            let desired_joint_positions = self.model_inference(&model, &model_input).await?;
             
             // send joint commands
             self.send_joint_commands(&desired_joint_positions).await?;
         }
     }
 
-    async fn get_joint_states(&self) -> Result<[f32; 16]> {
+    async fn get_robot_state(&self) -> Result<[f32; 656]> {
         let servo_data = self.servo.read_continuous()?;
-        let joint_states: [f32; 16] = servo_data.servo.iter()
-            .take(16)
-            .map(|s| s.target_location as f32)
+        // first 3 elements are x_vel, y_vel, rot, (set to 0)
+        // t is current time
+        // dof_pos is current joint positions
+        // dof_vel is current joint velocities
+        // prev_actions is previous actions
+        // imu_ang_vel is angular velocity of the IMU
+        // imu_euler_xyz is euler angles of the IMU
+        let mut combined_robot_state = [0.0; 656]; // 41 + 615
+
+        let time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f32();
+        
+        let sin_time = (2.0 * std::f32::consts::PI * time / self.cycle_time).sin();
+        let cos_time = (2.0 * std::f32::consts::PI * time / self.cycle_time).cos();
+
+        combined_robot_state[3] = sin_time;
+        combined_robot_state[4] = cos_time;
+
+        let joint_positions: [f32; 10] = servo_data.servo.iter()
+            .take(10)
+            .map(|s| s.current_location as f32)
             .collect::<Vec<f32>>()
             .try_into()
-            .unwrap_or([0.0; 16]);
-        Ok(joint_states)
+            .unwrap_or([0.0; 10]);
+
+        let joint_velocities: [f32; 10] = servo_data.servo.iter()
+            .take(10)
+            .map(|s| s.current_speed as f32)
+            .collect::<Vec<f32>>()
+            .try_into()
+            .unwrap_or([0.0; 10]);
+
+        combined_robot_state[5..15].copy_from_slice(&joint_positions);
+        combined_robot_state[15..25].copy_from_slice(&joint_velocities);
+        combined_robot_state[25..35].copy_from_slice(&self.prev_actions);
+
+        let imu_ang_vel = [0.0; 3]; // TOOD: IMU
+        let imu_euler_xyz = [0.0; 3];
+
+        combined_robot_state[35..38].copy_from_slice(&imu_ang_vel);
+        combined_robot_state[38..41].copy_from_slice(&imu_euler_xyz);
+
+        combined_robot_state[41..656].copy_from_slice(&self.prev_buffer);
+
+        Ok(combined_robot_state)
     }
 
-    async fn model_inference(&self, model: &Model, joint_states: &[f32; 16]) -> Result<[f32; 16]> {
-        //  
+    async fn model_inference(&mut self, model: &Model, model_input: &[f32; 656]) -> Result<[f32; 16]> {
+
         // x_vel: Array1<f32>,
         // y_vel: Array1<f32>,
         // rot: Array1<f32>,
-        // t: Array1<f32>,
+        // t_sin: Array1<f32>,
+        // t_cos: Array1<f32>, 
         // dof_pos: Array1<f32>,
         // dof_vel: Array1<f32>,
         // prev_actions: Array1<f32>,
         // imu_ang_vel: Array1<f32>,
         // imu_euler_xyz: Array1<f32>,
-        // buffer: Array1<f32>,
+        // hist_obs: Array1<f32>,
 
+        let model_output = model.infer(model_input)?;
+        // model output is {"actions": actions_scaled, "actions_raw": actions, "new_x": x}
+        // 10 dim each for actions, 615 dim for new_x
 
-        let model_output = model.infer(joint_states)?;
+        self.prev_actions.copy_from_slice(&model_output[..10]);  // Store actions
+        self.prev_buffer.copy_from_slice(&model_output[20..635]);
 
-        // TODO: Implement proper conversion from model output to desired joint positions
-        let desired_joint_positions: [f32; 16] = model_output.iter()
-            .take(16)
-            .map(|&x| x)
-            .collect::<Vec<f32>>()
-            .try_into()
-            .unwrap_or([0.0; 16]);
+        let mut desired_joint_positions = [0.0; 16];  // Initialize all positions to 0.0
+        desired_joint_positions[..10].copy_from_slice(&model_output[..10]);
 
         Ok(desired_joint_positions)   
     }
@@ -96,10 +139,9 @@ impl Robot{
 }
 
 #[tokio::main]
-pub async fn run(model: Arc<Model>, robot: Arc<Robot>) -> Result<()> {
-
+pub async fn run(model: Arc<Model>, robot: Arc<Mutex<Robot>>) -> Result<()> {
+    let mut robot = robot.lock().await;
     robot.servo.enable_readout()?;  
-
     robot.run(model).await?;
 
     Ok(())

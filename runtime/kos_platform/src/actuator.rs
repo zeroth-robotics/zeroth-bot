@@ -10,24 +10,64 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
+use lazy_static::lazy_static;
 
 pub struct ZBotActuator {
     supervisor: Arc<RwLock<FeetechSupervisor>>,
+}
+pub const ZBOT_ALL_ACTUATOR_IDS: [u32; 16] = [1, 2, 3, 4, 5,
+                                   6, 7, 8, 9, 10,
+                                   11, 12, 13,
+                                   14, 15, 16];
+
+                                   
+lazy_static! {
+    pub static ref JOINT_NAME_TO_ID: HashMap<String, u32> = {
+        let mut map = HashMap::new();
+        // Right leg
+        map.insert("right_ankle_pitch".to_string(), 1);
+        map.insert("right_knee_pitch".to_string(), 2);
+        map.insert("right_hip_roll".to_string(), 3);
+        map.insert("right_hip_yaw".to_string(), 4);
+        map.insert("right_hip_pitch".to_string(), 5);
+        
+        // Left leg
+        map.insert("left_ankle_pitch".to_string(), 6);
+        map.insert("left_knee_pitch".to_string(), 7);
+        map.insert("left_hip_roll".to_string(), 8);
+        map.insert("left_hip_yaw".to_string(), 9);
+        map.insert("left_hip_pitch".to_string(), 10);
+        
+        // Right arm
+        map.insert("right_elbow_yaw".to_string(), 11);
+        map.insert("right_shoulder_yaw".to_string(), 12);
+        map.insert("right_shoulder_pitch".to_string(), 13);
+        
+        // Left arm
+        map.insert("left_shoulder_pitch".to_string(), 14);
+        map.insert("left_shoulder_yaw".to_string(), 15);
+        map.insert("left_elbow_yaw".to_string(), 16);
+        
+        map
+    };
+
+    pub static ref ID_TO_JOINT_NAME: HashMap<u32, String> = {
+        let mut map = HashMap::new();
+        for (name, &id) in JOINT_NAME_TO_ID.iter() {
+            map.insert(id, name.clone());
+        }
+        map
+    };
 }
 
 impl ZBotActuator {
     pub async fn new() -> Result<Self> {
         let mut supervisor = FeetechSupervisor::new()?;
 
-        // Add the servo with ID 1
-
-        let actuator_list = [1, 2, 3, 4, 5,
-                            6, 7, 8, 9, 10,
-                            11, 12, 13,
-                            14, 15, 16];
-        for id in actuator_list {
+        // Add the servos
+        for id in ZBOT_ALL_ACTUATOR_IDS {
             supervisor
-                .add_servo(id, FeetechActuatorType::Sts3215)
+                .add_servo(id as u8, FeetechActuatorType::Sts3215)
                 .await?;
         }
 

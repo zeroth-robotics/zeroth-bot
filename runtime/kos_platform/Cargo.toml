@@ -9,6 +9,7 @@ description = "KOS platform for Zeroth-01"
 
 [dependencies]
 kos_core = { version = "0.1.2", path = "../../kos_core" }
+kinfer = { path = "../../kinfer/kinfer/rust" } 
 async-trait = "0.1"
 eyre = "0.6"
 serde = { version = "1.0", features = ["derive"] }
