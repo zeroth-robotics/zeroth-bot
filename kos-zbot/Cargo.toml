@@ -1,14 +1,14 @@
 [package]
-name = "kos-zeroth-01"
-version = "0.1.2"
+name = "kos-zbot"
+version = "0.1.3"
 authors = ["Denys Bezmenov <denys@kscale.dev>", "Wesley Maa <wesley.maa@gmail.com>", "Jingxiang Mo <jx@kscale.dev>"]
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/kscalelabs/kos"
+repository = "https://github.com/zeroth-robotics/zeroth-bot"
 description = "KOS platform for Zeroth-01"
 
 [dependencies]
-kos_core = { version = "0.1.2", path = "../../kos_core" }
+kos = "0.3"
 async-trait = "0.1"
 eyre = "0.6"
 serde = { version = "1.0", features = ["derive"] }
