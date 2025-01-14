@@ -111,18 +111,22 @@ build-kos:
     - cd kos-zbot
     - source /root/.cargo/env
     - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.d
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.rlib
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/build
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/build/**/*
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/deps
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/deps/**/*
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.fingerprint
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.fingerprint/**/*
-    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.cargo-lock
+    - mv target/riscv64gc-unknown-linux-musl/release/kos-zeroth-01 target/riscv64gc-unknown-linux-musl/release/kos
   artifacts:
     paths:
-      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/
+      - kos/target/riscv64gc-unknown-linux-musl/release/
+    exclude: 
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.d
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.rlib
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/*.rlib
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/*.d
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/build
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/build/**/*
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/deps
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/deps/**/*
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.fingerprint
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.fingerprint/**/*
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.cargo-lock
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
