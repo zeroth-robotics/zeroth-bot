@@ -108,12 +108,21 @@ build-kos:
   variables:
     CC_riscv64gc_unknown_linux_musl: "/sdk/host/bin/riscv64-buildroot-linux-musl-gcc.br_real"
   script:
-    - source /root/.cargo/env
     - cd kos-zbot
+    - source /root/.cargo/env
     - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.d
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.rlib
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/build
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/build/**/*
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/deps
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/deps/**/*
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.fingerprint
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.fingerprint/**/*
+    - kos-zbot/target/riscv64gc-unknown-linux-musl/release/.cargo-lock
   artifacts:
     paths:
-      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/kos
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
