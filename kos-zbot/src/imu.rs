@@ -3,8 +3,8 @@ use async_trait::async_trait;
 use eyre::Result;
 use kos::{
     hal::{
-        EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, QuaternionResponse, IMU,
-        Operation,
+        EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, Operation,
+        QuaternionResponse, IMU,
     },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };

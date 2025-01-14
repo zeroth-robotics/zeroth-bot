@@ -12,12 +12,7 @@ use kos::{
     services::{ActuatorServiceImpl, IMUServiceImpl, OperationsServiceImpl},
     Platform, ServiceEnum,
 };
-use std::{
-    future::Future,
-    pin::Pin,
-    sync::Arc,
-    time::Duration,
-};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use tonic::async_trait;
 
 pub struct ZBotPlatform {}
