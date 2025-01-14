@@ -143,10 +143,11 @@ build-kos:
     - cd runtime/kos_platform
     - source /root/.cargo/env
     - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
+    - mv target/riscv64gc-unknown-linux-musl/release/kos-zeroth-01 target/riscv64gc-unknown-linux-musl/release/kos
 
   artifacts:
     paths:
-      - kos/target/riscv64gc-unknown-linux-musl/release/kos
+      - runtime/kos_platform/target/riscv64gc-unknown-linux-musl/release/kos
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
