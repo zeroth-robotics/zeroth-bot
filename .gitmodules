@@ -10,7 +10,8 @@
 [submodule "kos-zbot/models/tpu-mlir"]
 	path = kos-zbot/models/tpu-mlir
 	url = https://github.com/milkv-duo/tpu-mlir.git
-[submodule "kos-zbot/tonic"]
+[submodule "models/tpu-mlir"]
+	path = models/tpu-mlir
 	url = https://github.com/milkv-duo/tpu-mlir.git
 [submodule "kos-zbot/tonic"]
 	path = kos-zbot/tonic

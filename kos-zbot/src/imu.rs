@@ -23,9 +23,7 @@ impl ZBotIMU {
 
         let imu = Bno055Reader::new(i2c_bus)?;
 
-        Ok(Self {
-            imu: Arc::new(imu),
-        })
+        Ok(Self { imu: Arc::new(imu) })
     }
 }
 

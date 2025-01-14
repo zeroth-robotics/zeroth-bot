@@ -18,3 +18,7 @@ tokio = { version = "1", features = ["full"] }
 linux_bno055 = "0.0.6"
 i2cdev = "0.6.1"
 tracing = "0.1"
+
+[patch.crates-io]
+tonic = { git = "https://github.com/hatomist/tonic-milkv" }
+tonic-build = { git = "https://github.com/hatomist/tonic-milkv", package = "tonic-build" }

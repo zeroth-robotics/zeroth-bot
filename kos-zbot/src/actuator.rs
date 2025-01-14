@@ -2,10 +2,10 @@ use crate::firmware::feetech::{
     FeetechActuator, FeetechActuatorInfo, FeetechActuatorType, FeetechSupervisor,
 };
 use eyre::Result;
-use kos_core::google_proto::longrunning::Operation;
-use kos_core::hal::Actuator;
-use kos_core::kos_proto::actuator::*;
-use kos_core::kos_proto::common::{ActionResponse, ActionResult, Error as KosError, ErrorCode};
+use kos::kos_proto::google_proto::longrunning::Operation;
+use kos::kos_proto::hal::Actuator;
+use kos::kos_proto::actuator::*;
+use kos::kos_proto::common::{ActionResponse, ActionResult, Error as KosError, ErrorCode};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
