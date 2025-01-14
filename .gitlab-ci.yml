@@ -113,7 +113,7 @@ build-kos:
     - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
   artifacts:
     paths:
-      - kos/target/riscv64gc-unknown-linux-musl/release/kos
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/kos
     expire_in: 1 week
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
