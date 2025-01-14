@@ -114,7 +114,7 @@ build-kos:
     - mv target/riscv64gc-unknown-linux-musl/release/kos-zbot target/riscv64gc-unknown-linux-musl/release/kos
   artifacts:
     paths:
-      - kos/target/riscv64gc-unknown-linux-musl/release/
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/
     exclude: 
       - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.d
       - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.rlib
