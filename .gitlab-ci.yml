@@ -98,38 +98,6 @@ build-efuse:
         - kos-zbot/**/*
         - .gitlab-ci.yml
 
-# build-runtime:
-#   <<: *runner
-#   stage: build-runtime
-#   image: $TOOLCHAIN_IMAGE:latest
-#   needs:
-#     - build-cviwrapper
-#     - build-servo
-#   script:
-#     - cd runtime
-#     - source /root/.cargo/env
-#     - cargo +nightly build --features milkv --no-default-features --target riscv64gc-unknown-linux-musl -Zbuild-std --release
-
-#   artifacts:
-#     paths:
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/
-#     exclude:
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/**/*.d
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/**/*.rlib
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/build
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/build/**/*
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/deps
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/deps/**/*
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/.fingerprint
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/.fingerprint/**/*
-#       - runtime/target/riscv64gc-unknown-linux-musl/release/.cargo-lock
-#     expire_in: 1 week
-#   rules:
-#     - if: $CI_PIPELINE_SOURCE == "push"
-#       changes:
-#         - runtime/**/*
-#         - .gitlab-ci.yml
-
 build-kos:
   <<: *runner
   stage: build-runtime
@@ -143,13 +111,6 @@ build-kos:
     - source /root/.cargo/env
     - cd kos-zbot
     - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
-
-    # - git clone https://github.com/kscalelabs/kos.git --depth 1 --branch zbot-feetechv2
-    # - cd kos
-    # - rm -rf platforms/zeroth-01; ln -s $PWD/../kos-zbot/kos_platform platforms/zeroth-01
-    # - source /root/.cargo/env
-    # - cargo +nightly build --target riscv64gc-unknown-linux-musl -F kos-zeroth-01 -Zbuild-std --release
-
   artifacts:
     paths:
       - kos/target/riscv64gc-unknown-linux-musl/release/kos
