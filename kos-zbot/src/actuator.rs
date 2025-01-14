@@ -2,12 +2,15 @@ use crate::firmware::feetech::{
     FeetechActuator, FeetechActuatorInfo, FeetechActuatorType, FeetechSupervisor,
 };
 use eyre::Result;
-use kos::hal::Operation;
-use kos::hal::Actuator;
-use kos::kos_proto::actuator::*;
-use kos::kos_proto::common::{ActionResponse, ActionResult, Error as KosError, ErrorCode};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use kos::hal::{Actuator, Operation};
+use kos::kos_proto::{
+    actuator::*,
+    common::{ActionResponse, ActionResult, Error as KosError, ErrorCode},
+};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::RwLock;
 use tonic::{Request, Response, Status};
 
