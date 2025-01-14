@@ -111,7 +111,7 @@ build-kos:
     - cd kos-zbot
     - source /root/.cargo/env
     - cargo +nightly build --target riscv64gc-unknown-linux-musl -Zbuild-std --release
-    - mv target/riscv64gc-unknown-linux-musl/release/kos-zbot target/riscv64gc-unknown-linux-musl/release/kos
+    - mv target/riscv64gc-unknown-linux-musl/release/kos-zbot target/riscv64gc-unknown-linux-musl/release/kos # rename to make work with buildroot
   artifacts:
     paths:
       - kos-zbot/target/riscv64gc-unknown-linux-musl/release/
