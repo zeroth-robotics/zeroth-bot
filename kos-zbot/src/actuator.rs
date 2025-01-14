@@ -2,8 +2,8 @@ use crate::firmware::feetech::{
     FeetechActuator, FeetechActuatorInfo, FeetechActuatorType, FeetechSupervisor,
 };
 use eyre::Result;
-use kos::kos_proto::google_proto::longrunning::Operation;
-use kos::kos_proto::hal::Actuator;
+use kos::hal::Operation;
+use kos::hal::Actuator;
 use kos::kos_proto::actuator::*;
 use kos::kos_proto::common::{ActionResponse, ActionResult, Error as KosError, ErrorCode};
 use std::collections::HashMap;
