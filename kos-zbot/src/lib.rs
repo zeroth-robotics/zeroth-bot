@@ -6,13 +6,13 @@ pub use actuator::*;
 pub use firmware::*;
 pub use imu::*;
 
-use kos::kos_proto::actuator::actuator_service_server::ActuatorServiceServer;
-use kos::kos_proto::imu::imu_service_server::ImuServiceServer;
-use kos::services::{ActuatorServiceImpl, IMUServiceImpl, OperationsServiceImpl};
-use kos::{Platform, ServiceEnum};
-use std::future::Future;
-use std::pin::Pin;
-use std::sync::Arc;
+use kos::{
+    kos_proto::actuator::actuator_service_server::ActuatorServiceServer,
+    kos_proto::imu::imu_service_server::ImuServiceServer,
+    services::{ActuatorServiceImpl, IMUServiceImpl, OperationsServiceImpl},
+    Platform, ServiceEnum,
+};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use tonic::async_trait;
 
 pub struct ZBotPlatform {}

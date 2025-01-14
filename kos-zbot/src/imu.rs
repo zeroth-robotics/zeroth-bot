@@ -2,14 +2,15 @@ use async_trait::async_trait;
 
 use eyre::Result;
 use kos::{
-    google_proto::longrunning::Operation,
     hal::{
-        EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, QuaternionResponse, IMU,
+        EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, Operation,
+        QuaternionResponse, IMU,
     },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
 use linux_bno055::{Bno055Reader, OperationMode};
 use std::{sync::Arc, time::Duration};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
 pub struct ZBotIMU {
@@ -22,9 +23,7 @@ impl ZBotIMU {
 
         let imu = Bno055Reader::new(i2c_bus)?;
 
-        Ok(Self {
-            imu: Arc::new(imu),
-        })
+        Ok(Self { imu: Arc::new(imu) })
     }
 }
 
@@ -115,11 +114,11 @@ impl IMU for ZBotIMU {
 
     async fn zero(
         &self,
-        _duration: Option<Duration>,
-        _max_retries: Option<u32>,
-        _max_angular_error: Option<f32>,
-        _max_vel: Option<f32>,
-        _max_accel: Option<f32>,
+        duration: Option<Duration>,
+        max_retries: Option<u32>,
+        max_angular_error: Option<f32>,
+        max_vel: Option<f32>,
+        max_accel: Option<f32>,
     ) -> Result<ActionResponse> {
         match self.imu.reset() {
             Ok(_) => {

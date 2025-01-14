@@ -1,5 +1,5 @@
 use kos::daemon::kos_runtime;
-use kos_zeroth_01::ZBotPlatform;
+use kos_zbot::ZBotPlatform;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

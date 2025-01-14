@@ -1,20 +1,20 @@
 [submodule "sim"]
 	path = sim
 	url = git@github.com:Zeroth-Robotics/sim.git
-[submodule "runtime/firmware/tpu-sdk-sg200x"]
-	path = runtime/firmware/tpu-sdk-sg200x
+[submodule "kos-zbot/firmware/tpu-sdk-sg200x"]
+	path = kos-zbot/firmware/tpu-sdk-sg200x
 	url = https://github.com/milkv-duo/tpu-sdk-sg200x.git
-[submodule "runtime/firmware/duo-sdk"]
-	path = runtime/firmware/duo-sdk
+[submodule "kos-zbot/firmware/duo-sdk"]
+	path = kos-zbot/firmware/duo-sdk
 	url = https://github.com/milkv-duo/duo-sdk.git
-[submodule "runtime/models/tpu-mlir"]
-	path = runtime/models/tpu-mlir
+[submodule "kos-zbot/models/tpu-mlir"]
+	path = kos-zbot/models/tpu-mlir
 	url = https://github.com/milkv-duo/tpu-mlir.git
 [submodule "models/tpu-mlir"]
 	path = models/tpu-mlir
 	url = https://github.com/milkv-duo/tpu-mlir.git
-[submodule "runtime/tonic"]
-	path = runtime/tonic
+[submodule "kos-zbot/tonic"]
+	path = kos-zbot/tonic
 	url = https://github.com/hyperium/tonic.git
 [submodule "client-py"]
 	path = client-py
