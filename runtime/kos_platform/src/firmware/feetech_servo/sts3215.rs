@@ -1,5 +1,7 @@
 use crate::firmware::feetech::{feetech_write, FeetechActuator, FeetechActuatorInfo, ServoInfo};
+use eyre::{eyre, Result};
 
+#[allow(dead_code)]
 enum Sts3215Register {
     ID = 0x05,
     PProportionalCoeff = 0x15,
@@ -36,12 +38,14 @@ impl Sts3215 {
         }
     }
 
-    fn unlock_eeprom(&mut self) {
-        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x00]);
+    fn unlock_eeprom(&mut self) -> Result<()> {
+        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x00]).map_err(|e| eyre!("Failed to unlock EEPROM: {}", e))?;
+        Ok(())
     }
 
-    fn lock_eeprom(&mut self) {
-        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x01]);
+    fn lock_eeprom(&mut self) -> Result<()> {
+        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x01]).map_err(|e| eyre!("Failed to lock EEPROM: {}", e))?;
+        Ok(())
     }
 }
 
@@ -54,30 +58,35 @@ impl FeetechActuator for Sts3215 {
         self.info
     }
 
-    fn set_position(&mut self, position_deg: f32) {
+    fn set_position(&mut self, position_deg: f32) -> Result<()> {
         let raw = self.degrees_to_raw(position_deg);
-        feetech_write(self.id, Sts3215Register::TargetLocation as u8, &[raw as u8]);
+        feetech_write(self.id, Sts3215Register::TargetLocation as u8, &[raw as u8]).map_err(|e| eyre!("Failed to set position: {}", e))?;
+        Ok(())
     }
 
-    fn set_speed(&mut self, speed_deg_per_s: f32) {
-        unimplemented!()
+    fn set_speed(&mut self, _speed_deg_per_s: f32) -> Result<()> {
+        todo!("Implement speed control for ST3215 e.g. for calibration")
     }
 
-    fn enable_torque(&mut self) {
+    fn enable_torque(&mut self) -> Result<()> {
         self.info.torque_enabled = true;
-        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x01]);
+        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x01]).map_err(|e| eyre!("Failed to enable torque: {}", e))?;
+        Ok(())
     }
 
-    fn disable_torque(&mut self) {
+    fn disable_torque(&mut self) -> Result<()> {
         self.info.torque_enabled = false;
-        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x00]);
+        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x00]).map_err(|e| eyre!("Failed to disable torque: {}", e))?;
+        Ok(())
     }
 
-    fn change_id(&mut self, id: u8) {
-        self.unlock_eeprom();
-        feetech_write(self.id, Sts3215Register::ID as u8, &[id]);
-        self.lock_eeprom();
+    fn change_id(&mut self, id: u8) -> Result<()> {
+        // TODO: verification and prechecks
+        self.unlock_eeprom()?;
+        feetech_write(self.id, Sts3215Register::ID as u8, &[id]).map_err(|e| eyre!("Failed to change ID: {}", e))?;
+        self.lock_eeprom()?;
         self.id = id;
+        Ok(())
     }
 
     fn update_info(&mut self, info: &ServoInfo) {
@@ -103,25 +112,26 @@ impl FeetechActuator for Sts3215 {
         raw as f32 / 4096.0 * 360.0 - 180.0
     }
 
-    fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) {
-        self.unlock_eeprom();
+    fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) -> Result<()> {
+        self.unlock_eeprom()?;
         if let Some(p) = p {
             feetech_write(
                 self.id,
                 Sts3215Register::PProportionalCoeff as u8,
                 &[p as u8],
-            );
+            )?;
         }
         if let Some(i) = i {
-            feetech_write(self.id, Sts3215Register::IIntegralCoeff as u8, &[i as u8]);
+            feetech_write(self.id, Sts3215Register::IIntegralCoeff as u8, &[i as u8])?;
         }
         if let Some(d) = d {
             feetech_write(
                 self.id,
                 Sts3215Register::DDifferentialCoeff as u8,
                 &[d as u8],
-            );
+            )?;
         }
-        self.lock_eeprom();
+        self.lock_eeprom()?;
+        Ok(())
     }
 }
