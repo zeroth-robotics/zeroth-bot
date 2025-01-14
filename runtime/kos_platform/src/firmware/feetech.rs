@@ -1,12 +1,10 @@
 use super::feetech_servo::Sts3215;
 use eyre::Result;
 use std::collections::HashMap;
-use std::fmt;
 use std::os::raw::{c_int, c_short, c_uchar, c_uint, c_ushort};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::info;
-const MAX_SERVO_COMMAND_DATA: usize = 40;
 const MAX_SHMEM_DATA: usize = 2048;
 const MAX_SERVOS: usize = 32;
 
@@ -66,6 +64,7 @@ pub struct BroadcastCommand {
 }
 
 #[link(name = "feetech")]
+#[allow(dead_code)]
 extern "C" {
     fn servo_init() -> c_int;
     fn servo_deinit();
@@ -96,15 +95,15 @@ pub struct FeetechActuatorInfo {
 pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
     fn id(&self) -> u8;
     fn info(&self) -> FeetechActuatorInfo;
-    fn set_position(&mut self, position_deg: f32);
-    fn set_speed(&mut self, speed_deg_per_s: f32);
-    fn enable_torque(&mut self);
-    fn disable_torque(&mut self);
-    fn change_id(&mut self, id: u8);
+    fn set_position(&mut self, position_deg: f32) -> Result<()>;
+    fn set_speed(&mut self, speed_deg_per_s: f32) -> Result<()>;
+    fn enable_torque(&mut self) -> Result<()>;
+    fn disable_torque(&mut self) -> Result<()>;
+    fn change_id(&mut self, id: u8) -> Result<()>;
     fn update_info(&mut self, info: &ServoInfo);
     fn degrees_to_raw(&self, degrees: f32) -> u16;
     fn raw_to_degrees(&self, raw: u16) -> f32;
-    fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>);
+    fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
@@ -254,7 +253,7 @@ impl FeetechSupervisor {
         {
             // New scope to ensure servos lock is dropped
             let mut servos = self.servos.write().await;
-            servos.get_mut(&id).unwrap().disable_torque();
+            servos.get_mut(&id).unwrap().disable_torque()?;
         } // servos lock is dropped here
         self.broadcast_command().await?;
         Ok(())
@@ -264,7 +263,7 @@ impl FeetechSupervisor {
         {
             // New scope to ensure servos lock is dropped
             let mut servos = self.servos.write().await;
-            servos.get_mut(&id).unwrap().enable_torque();
+            servos.get_mut(&id).unwrap().enable_torque()?;
             self.actuator_desired_positions.remove(&id);
         } // servos lock is dropped here
         self.broadcast_command().await?;
@@ -318,11 +317,11 @@ impl FeetechSupervisor {
     pub async fn change_id(&mut self, id: u8, new_id: u8) -> Result<()> {
         let mut servos = self.servos.write().await;
         if let Some(servo) = servos.get_mut(&id) {
-            servo.change_id(new_id);
+            servo.change_id(new_id)?;
             Ok(())
         } else {
             let mut new_servo = Box::new(Sts3215::new(id));
-            new_servo.change_id(new_id);
+            new_servo.change_id(new_id)?;
             Ok(())
         }
     }

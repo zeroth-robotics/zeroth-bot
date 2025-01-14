@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 use eyre::Result;
-use kos_core::{
+use kos::{
     google_proto::longrunning::Operation,
     hal::{
         EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, QuaternionResponse, IMU,
@@ -10,7 +10,6 @@ use kos_core::{
 };
 use linux_bno055::{Bno055Reader, OperationMode};
 use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
 pub struct ZBotIMU {
@@ -116,11 +115,11 @@ impl IMU for ZBotIMU {
 
     async fn zero(
         &self,
-        duration: Option<Duration>,
-        max_retries: Option<u32>,
-        max_angular_error: Option<f32>,
-        max_vel: Option<f32>,
-        max_accel: Option<f32>,
+        _duration: Option<Duration>,
+        _max_retries: Option<u32>,
+        _max_angular_error: Option<f32>,
+        _max_vel: Option<f32>,
+        _max_accel: Option<f32>,
     ) -> Result<ActionResponse> {
         match self.imu.reset() {
             Ok(_) => {

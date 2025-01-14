@@ -1,15 +1,14 @@
 use crate::firmware::feetech::{
-    FeetechActuator, FeetechActuatorInfo, FeetechActuatorType, FeetechSupervisor,
+    FeetechActuatorType, FeetechSupervisor,
 };
 use eyre::Result;
-use kos_core::google_proto::longrunning::Operation;
-use kos_core::hal::Actuator;
-use kos_core::kos_proto::actuator::*;
-use kos_core::kos_proto::common::{ActionResponse, ActionResult, Error as KosError, ErrorCode};
+use kos::google_proto::longrunning::Operation;
+use kos::hal::Actuator;
+use kos::kos_proto::actuator::*;
+use kos::kos_proto::common::{ActionResponse, ActionResult, Error as KosError, ErrorCode};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::RwLock;
-use tonic::{Request, Response, Status};
 
 pub struct ZBotActuator {
     supervisor: Arc<RwLock<FeetechSupervisor>>,
@@ -100,7 +99,7 @@ impl Actuator for ZBotActuator {
                 let i = config.ki.map(|v| v as f32);
                 let d = config.kd.map(|v| v as f32);
                 if p.is_some() || i.is_some() || d.is_some() {
-                    servo.set_pid(p, i, d);
+                    servo.set_pid(p, i, d)?;
                 }
                 Ok(())
             } else {
@@ -161,7 +160,7 @@ impl Actuator for ZBotActuator {
         Ok(states)
     }
 
-    async fn calibrate_actuator(&self, request: CalibrateActuatorRequest) -> Result<Operation> {
+    async fn calibrate_actuator(&self, _request: CalibrateActuatorRequest) -> Result<Operation> {
         Ok(Operation::default())
     }
 }
