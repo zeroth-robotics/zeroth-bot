@@ -116,6 +116,8 @@ build-kos:
     paths:
       - kos-zbot/target/riscv64gc-unknown-linux-musl/release/
     exclude: 
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/examples
+      - kos-zbot/target/riscv64gc-unknown-linux-musl/release/incremental
       - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.d
       - kos-zbot/target/riscv64gc-unknown-linux-musl/release/**/*.rlib
       - kos-zbot/target/riscv64gc-unknown-linux-musl/release/*.rlib
