@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-
 use eyre::Result;
 use kos::{
     hal::{
@@ -9,8 +8,8 @@ use kos::{
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
 use linux_bno055::{Bno055Reader, OperationMode};
-use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use std::time::Duration;
+use std::sync::Arc;
 use tracing::{debug, error, info};
 
 pub struct ZBotIMU {
@@ -114,11 +113,11 @@ impl IMU for ZBotIMU {
 
     async fn zero(
         &self,
-        duration: Option<Duration>,
-        max_retries: Option<u32>,
-        max_angular_error: Option<f32>,
-        max_vel: Option<f32>,
-        max_accel: Option<f32>,
+        _duration: Option<Duration>,
+        _max_retries: Option<u32>,
+        _max_angular_error: Option<f32>,
+        _max_vel: Option<f32>,
+        _max_accel: Option<f32>,
     ) -> Result<ActionResponse> {
         match self.imu.reset() {
             Ok(_) => {
