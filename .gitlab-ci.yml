@@ -118,5 +118,5 @@ build-kos:
   rules:
     - if: $CI_PIPELINE_SOURCE == "push"
       changes:
-        - kos-zbot/kos_platform/**/*
+        - kos-zbot/**/*
         - .gitlab-ci.yml
