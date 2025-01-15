@@ -9,12 +9,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use uuid::Uuid;
-use serde_json::Value;
 use std::fs;
-use std::io::{self, Write};
 use std::path::Path;
 use serde::{Serialize, Deserialize};
-use fs2::available_space;
 use kos::kos_proto::common::{ActionResponse, Error};
 use kos::kos_proto::inference::get_models_info_request::Filter;
 use kos::kos_proto::inference::ModelUids;
@@ -256,10 +253,9 @@ impl Inference for ZBotInference {
             if !model_path.exists() {
                 error!("Model file not found at {:?}", model_path);
                 // Remove from available models since the file is missing
-                let mut available = self.available_models.write().await;
-                available.remove(&uid);
+                let _model_metadata = self.available_models.write().await;
                 // Save metadata after removal
-                drop(available);
+                drop(_model_metadata);
                 if let Err(e) = self.save_metadata().await {
                     error!("Failed to save metadata after removing missing model: {}", e);
                 }
@@ -312,7 +308,7 @@ impl Inference for ZBotInference {
     async fn unload_models(&self, uids: Vec<String>) -> Result<ActionResponse> {
         debug!("Unloading models");
         let mut models = self.loaded_models.write().await;
-        let mut model_metadata = self.available_models.write().await;
+        let _model_metadata = self.available_models.write().await;
 
         for uid in uids {
             if let Some(model) = models.remove(&uid) {
