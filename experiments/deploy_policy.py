@@ -33,22 +33,22 @@ def get_gravity_orientation(quaternion):
 DT = FREQUENCY = 1/100. # 100Hz
 
 ID_TO_JOINT_NAME = {
-    1: "right_ankle_pitch",
-    2: "right_knee_pitch",
-    3: "right_hip_pitch",
-    4: "right_hip_yaw",
-    5: "right_hip_roll",
-    6: "left_ankle_pitch",
-    7: "left_knee_pitch",
-    8: "left_hip_pitch",
-    9: "left_hip_yaw",
-    10: "left_hip_roll",
-    11: "right_elbow_pitch",
-    12: "right_shoulder_pitch",
-    13: "right_shoulder_yaw",
-    14: "left_shoulder_yaw",
-    15: "left_shoulder_pitch",
-    16: "left_elbow_pitch",
+    1: "R_Ankle_Pitch",
+    2: "R_Knee_Pitch",
+    3: "R_Hip_Pitch",
+    4: "R_Hip_Yaw",
+    5: "R_Hip_Roll",
+    6: "L_Ankle_Pitch",
+    7: "L_Knee_Pitch",
+    8: "L_Hip_Pitch",
+    9: "L_Hip_Yaw",
+    10: "L_Hip_Roll",
+    11: "R_Elbow_Pitch",
+    12: "R_Shoulder_Pitch",
+    13: "R_Shoulder_Yaw",
+    14: "L_Shoulder_Yaw",
+    15: "L_Shoulder_Pitch",
+    16: "L_Elbow_Pitch",
 }
 
 
@@ -70,7 +70,7 @@ class RealPPOController:
 
         # Walking command defaults
         self.command = {
-            "x_vel": 0.1,
+            "x_vel": 0.0,
             "y_vel": 0.0,
             "rot": 0.0,
         }
@@ -100,7 +100,7 @@ class RealPPOController:
         self.model_info["default_standing"] = np.array([0.0, 0.0, -0.377, 0.796, 0.377, 0.0, 0.0, 0.377, -0.796, -0.377])
 
         for id in self.all_ids:
-            self.kos.actuator.configure_actuator(id, kp=45, kd=32, torque_enabled=True)
+            self.kos.actuator.configure_actuator(id, kp=32, kd=32, torque_enabled=False)
 
         self.initial_offsets = []
         for id in self.all_ids:
@@ -115,7 +115,6 @@ class RealPPOController:
         self.offsets = self.initial_offsets + self.offsets
         print(f"Offsets: {self.offsets}")
 
-        # self.projected_gravity = self.imu_reader.get_projected_gravity()
         # Initialize input state with dynamic sizes from metadata
         self.input_data = {
             "x_vel.1": np.zeros(1, dtype=np.float32),
@@ -133,7 +132,6 @@ class RealPPOController:
         self.actions = np.zeros(self.model_info["num_actions"], dtype=np.float32)
         self.buffer = np.zeros(self.model_info["num_observations"], dtype=np.float32)
 
-        breakpoint()
         self.set_default_position()
         time.sleep(1)
         print('Default position set')
@@ -177,7 +175,8 @@ class RealPPOController:
         # TODO - check this against mujoco
         projected_gravity = get_gravity_orientation([quaternion.w, quaternion.x, quaternion.y, quaternion.z])
         projected_gravity = np.array([projected_gravity[0], projected_gravity[2], projected_gravity[1]])
-
+        projected_gravity = np.array([0.0, 0.0, -1.0])
+        # pfb30
         # Update input dictionary
         self.input_data["dof_pos.1"] = joint_positions.astype(np.float32)
         self.input_data["dof_vel.1"] = joint_velocities.astype(np.float32)
@@ -227,28 +226,17 @@ class RealPPOController:
         # Run inference
         outputs = self.kinfer(self.input_data)
 
-        assert isinstance(outputs, dict), "Outputs are not a dictionary!"
-        assert "actions_scaled" in outputs, "actions_scaled not in outputs!"
-        assert "actions" in outputs, "actions not in outputs!"
-        assert "x.3" in outputs, "x.3 not in outputs!"
-
         # Extract outputs
         positions = outputs["actions_scaled"]
 
         self.actions = outputs["actions"]
         self.buffer = outputs["x.3"]
 
-        # Clip positions for safety
-        positions = np.clip(positions, -0.75, 0.75)
-
         positions = self.joint_mapping_signs * positions
 
         expected_positions = positions + self.offsets
         expected_positions = np.rad2deg(expected_positions)
 
-        # Send positions to robot
-        # EMI issues:
-        # for _ in range(3):
         self.move_actuators(expected_positions)
 
 
@@ -261,6 +249,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
+    args.ip = "10.33.85.3"
     kos = pykos.KOS(args.ip)
     motor_signs = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
 
