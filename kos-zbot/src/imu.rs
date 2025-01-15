@@ -1,14 +1,15 @@
 use async_trait::async_trait;
-
 use eyre::Result;
-use kos_core::{
-    google_proto::longrunning::Operation,
-    hal::{EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, QuaternionResponse, IMU},
+use kos::{
+    hal::{
+        EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, Operation,
+        QuaternionResponse, IMU,
+    },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
-use linux_bno055::{Bno055Reader, OperationMode};
-use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use imu::bno055::{Bno055Reader, OperationMode};
+use std::time::Duration;
+use std::sync::Arc;
 use tracing::{debug, error, info};
 
 pub struct ZBotIMU {
@@ -21,9 +22,7 @@ impl ZBotIMU {
 
         let imu = Bno055Reader::new(i2c_bus)?;
 
-        Ok(Self {
-            imu: Arc::new(imu),
-        })
+        Ok(Self { imu: Arc::new(imu) })
     }
 }
 
@@ -114,11 +113,11 @@ impl IMU for ZBotIMU {
 
     async fn zero(
         &self,
-        duration: Option<Duration>,
-        max_retries: Option<u32>,
-        max_angular_error: Option<f32>,
-        max_vel: Option<f32>,
-        max_accel: Option<f32>,
+        _duration: Option<Duration>,
+        _max_retries: Option<u32>,
+        _max_angular_error: Option<f32>,
+        _max_vel: Option<f32>,
+        _max_accel: Option<f32>,
     ) -> Result<ActionResponse> {
         match self.imu.reset() {
             Ok(_) => {
