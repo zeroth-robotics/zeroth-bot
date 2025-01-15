@@ -112,10 +112,6 @@ class RealPPOController:
         self.initial_offsets = np.array([-0.09203884727313848, -0.8697671067311585, -0.018407769454627694, -0.8375535101855601, 0.10584467436410924, -0.02454369260617026, 0.8406214717613314, 0.20708740636456155, -0.6611457195787114, -0.11504855909142309])
         self.set_initial_offsets()
 
-        # go to initial offsets
-        for idx, id in enumerate(self.all_ids):
-            self.kos.actuator.command_actuators([{"actuator_id": id, "position": np.rad2deg(self.initial_offsets[idx])}])
-
         # Adjust for the sign of each joint
         self.left_offsets = self.joint_mapping_signs[:5] * np.array(self.model_info["default_standing"][:5])
         self.right_offsets = self.joint_mapping_signs[5:] * np.array(self.model_info["default_standing"][5:])
@@ -140,10 +136,9 @@ class RealPPOController:
         self.actions = np.zeros(self.model_info["num_actions"], dtype=np.float32)
         self.buffer = np.zeros(self.model_info["num_observations"], dtype=np.float32)
 
-        breakpoint()
         self.set_default_position()
         time.sleep(1)
-        breakpoint()
+
         print('Default position set')
 
     def set_initial_offsets(self) -> None:
@@ -255,7 +250,7 @@ class RealPPOController:
 
         expected_positions = positions + self.offsets  # in radians
 
-        # self.move_actuators(np.rad2deg(expected_positions))
+        self.move_actuators(np.rad2deg(expected_positions))
 
 
 def main() -> None:
@@ -291,6 +286,10 @@ def main() -> None:
             counter += 1
             print(f"Time taken: {time.time() - loop_start_time}")
             time.sleep(max(0, FREQUENCY - (time.time() - loop_start_time)))
+
+            if counter > 250: # 1 second out
+                raise RuntimeError("1 second out")
+
     except KeyboardInterrupt:
         logger.info("Exiting...")
     except RuntimeError as e:
