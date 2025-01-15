@@ -1,4 +1,4 @@
-use crate::firmware::feetech::{feetech_write, FeetechActuator, FeetechActuatorInfo, ServoInfo};
+use crate::firmware::feetech::{feetech_read, feetech_write, FeetechActuator, FeetechActuatorInfo, ServoInfo};
 use eyre::{eyre, Result};
 
 #[allow(dead_code)]
@@ -43,8 +43,16 @@ impl Sts3215 {
         Ok(())
     }
 
-    fn lock_eeprom(&mut self) -> Result<()> {
+    pub fn lock_eeprom(&mut self) -> Result<()> {
         feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x01]).map_err(|e| eyre!("Failed to lock EEPROM: {}", e))?;
+        Ok(())
+    }
+
+    pub fn check_id(&mut self) -> Result<()> {
+        let id = feetech_read(self.id, Sts3215Register::ID as u8, 1)?[0];
+        if id != self.id {
+            return Err(eyre!("Servo ID mismatch: expected {}, got {}", self.id, id));
+        }
         Ok(())
     }
 }

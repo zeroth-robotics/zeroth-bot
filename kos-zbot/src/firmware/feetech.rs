@@ -69,7 +69,7 @@ extern "C" {
     fn servo_init() -> c_int;
     fn servo_deinit();
     fn servo_write(id: c_uchar, address: c_uchar, data: *const c_uchar, length: c_uchar) -> c_int;
-    fn servo_read(id: c_uchar, address: c_uchar, length: c_uchar, data: *mut c_uchar) -> c_int;
+    fn servo_read(id: c_uchar, address: c_uchar, data: *mut c_uchar, length: c_uchar) -> c_int;
     fn servo_set_active_servos(active_servos: ActiveServoList) -> c_int;
     fn servo_get_info(info_buffer: *mut ServoInfoBuffer) -> c_int;
     fn servo_broadcast_command(command: BroadcastCommand) -> c_int;
@@ -78,6 +78,24 @@ extern "C" {
 #[derive(Debug, Clone, Copy)]
 pub enum FeetechActuatorType {
     Sts3215,
+}
+
+impl FeetechActuatorType {
+    pub fn from_model_id(id: &[u8]) -> Option<Self> {
+        if id.len() != 2 {
+            return None;
+        }
+        match (id[0], id[1]) {
+            (0x09, 0x03) => Some(FeetechActuatorType::Sts3215),
+            _ => None,
+        }
+    }
+
+    pub fn model_id(&self) -> [u8; 2] {
+        match self {
+            FeetechActuatorType::Sts3215 => [0x09, 0x03],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -340,6 +358,32 @@ pub fn feetech_write(id: u8, address: u8, data: &[u8]) -> Result<()> {
         if servo_write(id, address, data.as_ptr(), data.len() as u8) != 0 {
             return Err(eyre::eyre!("Failed to write to servo"));
         }
+    }
+    Ok(())
+}
+
+pub fn feetech_read(id: u8, address: u8, length: u8) -> Result<Vec<u8>> {
+    let mut data = vec![0u8; length as usize];
+    unsafe {
+        if servo_read(id, address, data.as_mut_ptr(), length) != 0 {
+            return Err(eyre::eyre!("Failed to read from servo"));
+        }
+    }
+    Ok(data)
+}
+
+pub fn feetech_init() -> Result<()> {
+    unsafe {
+        if servo_init() != 0 {
+            return Err(eyre::eyre!("Failed to initialize servo system"));
+        }
+    }
+    Ok(())
+}
+
+pub fn feetech_deinit() -> Result<()> {
+    unsafe {
+        servo_deinit();
     }
     Ok(())
 }
