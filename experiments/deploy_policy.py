@@ -1,4 +1,8 @@
-""" Deploying policy for tests."""
+""" Deploying policy for tests.
+
+Run:
+    python deploy_policy.py --model zbot_walking_armature_friction.kinfer
+"""
 import argparse
 import time
 
@@ -29,8 +33,6 @@ def get_gravity_orientation(quaternion):
 
     return gravity_orientation
 
-
-DT = FREQUENCY = 1/50. # 50Hz
 
 ID_TO_JOINT_NAME = {
     1: "R_Ankle_Pitch",
@@ -70,7 +72,7 @@ class RealPPOController:
 
         # Walking command defaults
         self.command = {
-            "x_vel": 0.0,
+            "x_vel": 0.4,
             "y_vel": 0.0,
             "rot": 0.0,
         }
@@ -88,9 +90,11 @@ class RealPPOController:
             "robot_damping": metadata["robot_damping"],
             "default_standing": metadata["default_standing"],
         }
+        self.frequency = metadata["sim_dt"] * metadata["sim_decimation"]
 
         self.left_arm_ids = [14, 15, 16]
         self.right_arm_ids = [11, 12, 13]
+        
         
         self.left_leg_ids = [10, 9, 8, 7, 6]
         self.right_leg_ids = [5, 4, 3, 2, 1]
@@ -232,7 +236,7 @@ class RealPPOController:
         self.input_data["x_vel.1"][0] = np.float32(self.command["x_vel"])
         self.input_data["y_vel.1"][0] = np.float32(self.command["y_vel"])
         self.input_data["rot.1"][0] = np.float32(self.command["rot"])
-        self.input_data["t.1"][0] = np.float32(time)
+        self.input_data["t.1"][0] = np.float32(self.frequency * time)
 
         # Update robot state
         self.update_robot_state()
@@ -255,7 +259,7 @@ class RealPPOController:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="zbot_walking.kinfer")
+    parser.add_argument("--model", type=str, default="zbot_walking_armature_friction.kinfer")
     parser.add_argument("--ip", type=str, default="192.168.42.1")
     args = parser.parse_args()
 
@@ -266,10 +270,8 @@ def main() -> None:
     kos = pykos.KOS(args.ip)
     motor_signs = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
 
-    standing = args.model
-
     controller = RealPPOController(
-        model_path=standing,
+        model_path=args.model,
         joint_mapping_signs=motor_signs,
         kos=kos,
         logger=logger,
@@ -282,12 +284,12 @@ def main() -> None:
 
         while True:
             loop_start_time = time.time()
-            controller.step(DT * counter)
+            controller.step(counter)
             counter += 1
             print(f"Time taken: {time.time() - loop_start_time}")
-            time.sleep(max(0, FREQUENCY - (time.time() - loop_start_time)))
+            time.sleep(max(0, controller.frequency - (time.time() - loop_start_time)))
 
-            if counter > 250: # 1 second out
+            if counter > 500: # 1 second out
                 raise RuntimeError("1 second out")
 
     except KeyboardInterrupt:
