@@ -7,7 +7,7 @@ use kos::{
     },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
-use imu::linux_bno055::{Bno055Reader, OperationMode};
+use imu::bno055::{Bno055Reader, OperationMode};
 use std::time::Duration;
 use std::sync::Arc;
 use tracing::{debug, error, info};

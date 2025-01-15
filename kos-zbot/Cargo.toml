@@ -15,7 +15,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tonic = { version="0.12", git = "https://github.com/hatomist/tonic-milkv" }
 tokio = { version = "1", features = ["full"] }
-imu = "0.1.7"
+imu = "0.2"
 i2cdev = "0.6.1"
 tracing = "0.1"
 
