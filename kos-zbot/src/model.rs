@@ -1,8 +1,8 @@
 use crate::Model;
 use eyre::Result;
-use kos_core::hal::Inference;
-use kos_core::kos_proto::inference::*;
-use kos_core::kos_proto::common::ErrorCode;
+use kos::hal::Inference;
+use kos::kos_proto::inference::*;
+use kos::kos_proto::common::ErrorCode;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -15,9 +15,9 @@ use std::io::{self, Write};
 use std::path::Path;
 use serde::{Serialize, Deserialize};
 use fs2::available_space;
-use kos_core::kos_proto::common::{ActionResponse, Error};
-use kos_core::kos_proto::inference::get_models_info_request::Filter;
-use kos_core::kos_proto::inference::ModelUids;
+use kos::kos_proto::common::{ActionResponse, Error};
+use kos::kos_proto::inference::get_models_info_request::Filter;
+use kos::kos_proto::inference::ModelUids;
 
 const MODELS_DIR: &'static str = "/opt/models";
 const METADATA_FILE: &'static str = "/opt/models/metadata.json";
@@ -389,8 +389,8 @@ impl Inference for ZBotInference {
                     error!("Inference failed: {}", e);
                     Ok(ForwardResponse {
                         outputs: vec![],
-                        error: Some(kos_core::kos_proto::common::Error {
-                            code: kos_core::kos_proto::common::ErrorCode::HardwareFailure as i32,
+                        error: Some(Error {
+                            code: ErrorCode::HardwareFailure as i32,
                             message: format!("Inference failed: {}", e),
                         }),
                     })

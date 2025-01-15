@@ -8,16 +8,20 @@ repository = "https://github.com/zeroth-robotics/zeroth-bot"
 description = "KOS platform for Zeroth-01"
 
 [dependencies]
-kos = "0.3"
+kos = "0.4.1"
 async-trait = "0.1"
 eyre = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tonic = { version="0.12", git = "https://github.com/hatomist/tonic-milkv" }
+tonic-build = { git = "https://github.com/hatomist/tonic-milkv", package = "tonic-build" }
 tokio = { version = "1", features = ["full"] }
 imu = "0.2"
 i2cdev = "0.6.1"
 tracing = "0.1"
+fs2 = "0.4.3"
+lazy_static = "1.5"
+uuid = { version = "1.12", features = ["v4"] }
 
 [patch.crates-io]
 tonic = { git = "https://github.com/hatomist/tonic-milkv" }
