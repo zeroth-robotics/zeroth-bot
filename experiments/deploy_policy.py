@@ -30,7 +30,7 @@ def get_gravity_orientation(quaternion):
     return gravity_orientation
 
 
-DT = FREQUENCY = 1/100. # 100Hz
+DT = FREQUENCY = 1/50. # 50Hz
 
 ID_TO_JOINT_NAME = {
     1: "R_Ankle_Pitch",
@@ -100,19 +100,27 @@ class RealPPOController:
         self.model_info["default_standing"] = np.array([0.0, 0.0, -0.377, 0.796, 0.377, 0.0, 0.0, 0.377, -0.796, -0.377])
 
         for id in self.all_ids:
-            self.kos.actuator.configure_actuator(id, kp=32, kd=32, torque_enabled=False)
+            self.kos.actuator.configure_actuator(id, kp=32, kd=32, torque_enabled=True)
 
-        self.initial_offsets = []
-        for id in self.all_ids:
-            self.initial_offsets.append(np.deg2rad(self.kos.actuator.get_actuators_state([id])[0].position))
+        # self.initial_offsets = []
+        # for id in self.all_ids:
+        #     self.initial_offsets.append(np.deg2rad(self.kos.actuator.get_actuators_state([id])[0].position))
+        # print(f"Initial offsets: {self.initial_offsets}")
 
-        self.initial_offsets = np.array(self.initial_offsets)
+        # self.initial_offsets = np.array(self.initial_offsets)
+
+        self.initial_offsets = np.array([-0.09203884727313848, -0.8697671067311585, -0.018407769454627694, -0.8375535101855601, 0.10584467436410924, -0.02454369260617026, 0.8406214717613314, 0.20708740636456155, -0.6611457195787114, -0.11504855909142309])
+        self.set_initial_offsets()
+
+        # go to initial offsets
+        for idx, id in enumerate(self.all_ids):
+            self.kos.actuator.command_actuators([{"actuator_id": id, "position": np.rad2deg(self.initial_offsets[idx])}])
 
         # Adjust for the sign of each joint
         self.left_offsets = self.joint_mapping_signs[:5] * np.array(self.model_info["default_standing"][:5])
         self.right_offsets = self.joint_mapping_signs[5:] * np.array(self.model_info["default_standing"][5:])
-        self.offsets = np.concatenate([self.left_offsets, self.right_offsets])
-        self.offsets = self.initial_offsets + self.offsets
+        self.standing_offsets = np.concatenate([self.left_offsets, self.right_offsets])
+        self.offsets = self.initial_offsets + self.standing_offsets  # in radians
         print(f"Offsets: {self.offsets}")
 
         # Initialize input state with dynamic sizes from metadata
@@ -132,9 +140,15 @@ class RealPPOController:
         self.actions = np.zeros(self.model_info["num_actions"], dtype=np.float32)
         self.buffer = np.zeros(self.model_info["num_observations"], dtype=np.float32)
 
+        breakpoint()
         self.set_default_position()
         time.sleep(1)
+        breakpoint()
         print('Default position set')
+
+    def set_initial_offsets(self) -> None:
+        for idx, id in enumerate(self.all_ids):
+            self.kos.actuator.command_actuators([{"actuator_id": id, "position": np.rad2deg(self.initial_offsets[idx])}])
 
     def update_robot_state(self) -> None:
         """Update input data from robot sensors"""
@@ -165,24 +179,29 @@ class RealPPOController:
         joint_positions = np.deg2rad(joint_positions)
         joint_velocities = np.deg2rad(joint_velocities)
 
-        joint_positions -= self.offsets
+        joint_positions -= self.offsets # in radians
 
         joint_positions = self.joint_mapping_signs * joint_positions
         joint_velocities = self.joint_mapping_signs * joint_velocities
 
-        quaternion = self.kos.imu.get_quaternion()
-
         # TODO - check this against mujoco
-        projected_gravity = get_gravity_orientation([quaternion.w, quaternion.x, quaternion.y, quaternion.z])
-        projected_gravity = np.array([projected_gravity[0], projected_gravity[2], projected_gravity[1]])
-        projected_gravity = np.array([0.0, 0.0, -1.0])
         # pfb30
+        # quaternion = self.kos.imu.get_quaternion()
+        # projected_gravity = get_gravity_orientation([quaternion.w, quaternion.x, quaternion.y, quaternion.z])
+        # projected_gravity = np.array([projected_gravity[0], projected_gravity[2], projected_gravity[1]])
+        projected_gravity = np.array([0.0, 0.0, -1.0])
+
         # Update input dictionary
         self.input_data["dof_pos.1"] = joint_positions.astype(np.float32)
         self.input_data["dof_vel.1"] = joint_velocities.astype(np.float32)
         self.input_data["projected_gravity.1"] = projected_gravity.astype(np.float32)
         self.input_data["prev_actions.1"] = self.actions
         self.input_data["buffer.1"] = self.buffer
+
+    def get_offsets(self) -> np.ndarray:
+        for id in self.all_ids:
+            self.initial_offsets.append(np.deg2rad(self.kos.actuator.get_actuators_state([id])[0].position))
+        print(f"Offsets: {self.initial_offsets}")
 
     def zero_position(self) -> None:
         """Zero out the position of the robot"""
@@ -198,7 +217,7 @@ class RealPPOController:
         self.move_actuators(np.zeros(self.model_info["num_actions"]))
 
     def move_actuators(self, positions: np.ndarray) -> None:
-        """Move actuators to desired positions!"""
+        """Move actuators to desired positions in degrees"""
         left_positions = positions[:5]
         right_positions = positions[5:]
 
@@ -234,15 +253,14 @@ class RealPPOController:
 
         positions = self.joint_mapping_signs * positions
 
-        expected_positions = positions + self.offsets
-        expected_positions = np.rad2deg(expected_positions)
+        expected_positions = positions + self.offsets  # in radians
 
-        self.move_actuators(expected_positions)
+        # self.move_actuators(np.rad2deg(expected_positions))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="experiments/zbot_walking.kinfer")
+    parser.add_argument("--model", type=str, default="zbot_walking.kinfer")
     parser.add_argument("--ip", type=str, default="192.168.42.1")
     args = parser.parse_args()
 
