@@ -32,6 +32,9 @@ impl Model {
         let input_size = unsafe { get_input_size() };
         let output_size = unsafe { get_output_size() };
 
+        println!("input_size: {}", input_size);
+        println!("output_size: {}", output_size);
+
         if input.len() != input_size / std::mem::size_of::<f32>() {
             eyre::bail!("Input size mismatch");
         }

@@ -246,8 +246,18 @@ impl Inference for ZBotInference {
         drop(available);
         
         let mut failed_uids = Vec::new();
+        let mut skipped_uids = Vec::new();
 
-        for uid in uids {
+        {
+            let loaded = self.loaded_models.read().await;
+            skipped_uids.extend(
+                uids.iter()
+                    .filter(|uid| loaded.contains_key(*uid))
+                    .cloned()
+            );
+        }
+
+        for uid in uids.iter().filter(|uid| !skipped_uids.contains(*uid)) {
             let model_path = PathBuf::from(MODELS_DIR).join(format!("{}.cvimodel", uid));
             
             if !model_path.exists() {
@@ -259,29 +269,33 @@ impl Inference for ZBotInference {
                 if let Err(e) = self.save_metadata().await {
                     error!("Failed to save metadata after removing missing model: {}", e);
                 }
-                failed_uids.push(uid);
+                failed_uids.push(uid.clone());
                 continue;
             }
 
-            match self.load_model(&uid, model_path).await {
+            match self.load_model(uid, model_path).await {
                 Ok(_) => {
                     debug!("Loaded model {}", uid);
                 }
                 Err(e) => {
                     error!("Failed to load model {}: {}", uid, e);
-                    failed_uids.push(uid);
+                    failed_uids.push(uid.clone());
                 }
             }
         }
 
         if !failed_uids.is_empty() {
+            let mut message = format!("Failed to load models: {}", failed_uids.join(", "));
+            if !skipped_uids.is_empty() {
+                message.push_str(&format!(". Already loaded models: {}", skipped_uids.join(", ")));
+            }
             return Ok(LoadModelsResponse {
                 models: vec![],
                 result: Some(ActionResponse {
                     success: false,
                     error: Some(Error {
                         code: ErrorCode::InvalidArgument as i32,
-                        message: format!("Failed to load models: {}", failed_uids.join(", ")),
+                        message,
                     }),
                 }),
             });
@@ -290,7 +304,7 @@ impl Inference for ZBotInference {
         let models = self.loaded_models.read().await;
         let available = self.available_models.read().await;
         
-        Ok(LoadModelsResponse {
+        let mut response = LoadModelsResponse {
             models: models
                 .keys()
                 .map(|uid| ModelInfo {
@@ -302,7 +316,19 @@ impl Inference for ZBotInference {
                 success: true,
                 error: None,
             }),
-        })
+        };
+
+        if !skipped_uids.is_empty() {
+            if let Some(result) = response.result.as_mut() {
+                result.success = true;
+                result.error = Some(Error {
+                    code: ErrorCode::InvalidArgument as i32, 
+                    message: format!("Some models were already loaded: {}", skipped_uids.join(", ")),
+                });
+            }
+        }
+
+        Ok(response)
     }
 
     async fn unload_models(&self, uids: Vec<String>) -> Result<ActionResponse> {
