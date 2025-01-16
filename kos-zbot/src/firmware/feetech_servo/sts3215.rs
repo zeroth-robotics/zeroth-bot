@@ -145,7 +145,7 @@ impl FeetechActuator for Sts3215 {
             let speed_raw = info.current_speed as u16;
             let speed_magnitude = speed_raw & 0x7FFF;
             let speed_sign = if speed_raw & 0x8000 != 0 { -1.0 } else { 1.0 };
-            speed_sign * (self.raw_to_degrees(speed_magnitude, 0.0) + 180.0)
+            speed_sign * self.raw_to_degrees(speed_magnitude, 0.0)
         };
         self.info.load_percent = info.current_load as f32 / 100.0;
         self.info.voltage_v = info.current_voltage as f32 / 10.0;
@@ -182,5 +182,12 @@ impl FeetechActuator for Sts3215 {
         }
         self.lock_eeprom()?;
         Ok(())
+    }
+
+    fn get_current(&self) -> Result<f32> {
+        let current_raw = feetech_read(self.id, Sts3215Register::CurrentCurrent as u8, 2)?;
+        let current = u16::from_le_bytes(current_raw.clone().try_into().unwrap()) as f32 * 6.5;
+        println!("Current: {}, raw: {:?}", current, u16::from_le_bytes(current_raw.try_into().unwrap()));
+        Ok(current)
     }
 }

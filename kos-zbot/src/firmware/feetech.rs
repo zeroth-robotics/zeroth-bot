@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 const MAX_SHMEM_DATA: usize = 2048;
-const MAX_SERVOS: usize = 32;
+pub const MAX_SERVOS: usize = 32;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -70,8 +70,8 @@ extern "C" {
     fn servo_deinit();
     fn servo_write(id: c_uchar, address: c_uchar, data: *const c_uchar, length: c_uchar) -> c_int;
     fn servo_read(id: c_uchar, address: c_uchar, data: *mut c_uchar, length: c_uchar) -> c_int;
-    fn servo_set_active_servos(active_servos: ActiveServoList) -> c_int;
-    fn servo_get_info(info_buffer: *mut ServoInfoBuffer) -> c_int;
+    pub fn servo_set_active_servos(active_servos: ActiveServoList) -> c_int;
+    pub fn servo_get_info(info_buffer: *mut ServoInfoBuffer) -> c_int;
     fn servo_broadcast_command(command: BroadcastCommand) -> c_int;
 }
 
@@ -130,6 +130,7 @@ pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
     fn raw_to_degrees(&self, raw: u16, offset: f32) -> f32;
     fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) -> Result<()>;
     fn set_operation_mode(&mut self, mode: FeetechOperationMode) -> Result<()>;
+    fn get_current(&self) -> Result<f32>;
 }
 
 #[derive(Debug, Clone)]
@@ -248,7 +249,7 @@ impl FeetechSupervisor {
 
     pub async fn add_servo(&mut self, id: u8, actuator_type: FeetechActuatorType) -> Result<()> {
         let mut servos = self.servos.write().await;
-        let actuator = match actuator_type {
+        let mut actuator = match actuator_type {
             FeetechActuatorType::Sts3215 => Sts3215::new(id),
         };
         if actuator.check_id().is_ok() {
@@ -367,8 +368,9 @@ impl Drop for FeetechSupervisor {
 
 pub fn feetech_write(id: u8, address: u8, data: &[u8]) -> Result<()> {
     unsafe {
-        if servo_write(id, address, data.as_ptr(), data.len() as u8) != 0 {
-            return Err(eyre::eyre!("Failed to write to servo"));
+        let result = servo_write(id, address, data.as_ptr(), data.len() as u8);
+        if result != 0 {
+            return Err(eyre::eyre!("Failed to write to servo, result: {}", result));
         }
     }
     Ok(())
