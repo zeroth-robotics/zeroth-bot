@@ -254,12 +254,20 @@ impl FeetechSupervisor {
         let mut actuator = match actuator_type {
             FeetechActuatorType::Sts3215 => Sts3215::new(id),
         };
-        if actuator.check_id().is_ok() {
+        let mut success = false;
+        for _ in 0..10 {
+            if actuator.check_id().is_ok() {
+                success = true;
+                break;
+            }
+        }
+        
+        if success {
             servos.insert(id, Box::new(actuator));
             drop(servos);
             self.update_active_servos().await?;
         } else {
-            warn!("Failed to add servo {:?} not responding", id);
+            warn!("Failed to add servo {:?} not responding after 10 attempts", id);
         }
         Ok(())
     }
