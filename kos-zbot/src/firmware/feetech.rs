@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::os::raw::{c_int, c_short, c_uchar, c_uint, c_ushort};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 const MAX_SHMEM_DATA: usize = 2048;
 const MAX_SERVOS: usize = 32;
 
