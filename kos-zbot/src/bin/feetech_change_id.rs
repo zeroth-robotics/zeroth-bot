@@ -20,7 +20,6 @@ fn main() {
         return;
     }
 
-    println!("Initializing Feetech bus...");
     feetech_init().unwrap();
 
     // Check if old ID exists

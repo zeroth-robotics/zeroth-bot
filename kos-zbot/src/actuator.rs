@@ -14,15 +14,12 @@ pub struct ZBotActuator {
 }
 
 impl ZBotActuator {
-    pub async fn new() -> Result<Self> {
+    pub async fn new(actuator_list: &[u8]) -> Result<Self> {
         let mut supervisor = FeetechSupervisor::new()?;
 
-        // Add the servo with ID 1
-
-        let actuator_list = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
         for id in actuator_list {
             supervisor
-                .add_servo(id, FeetechActuatorType::Sts3215)
+                .add_servo(*id, FeetechActuatorType::Sts3215)
                 .await?;
         }
 

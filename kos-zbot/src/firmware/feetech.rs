@@ -76,6 +76,13 @@ extern "C" {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub enum FeetechOperationMode {
+    PositionControl,
+    SpeedControl,
+    TorqueControl,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub enum FeetechActuatorType {
     Sts3215,
 }
@@ -119,9 +126,10 @@ pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
     fn disable_torque(&mut self) -> Result<()>;
     fn change_id(&mut self, id: u8) -> Result<()>;
     fn update_info(&mut self, info: &ServoInfo);
-    fn degrees_to_raw(&self, degrees: f32) -> u16;
-    fn raw_to_degrees(&self, raw: u16) -> f32;
+    fn degrees_to_raw(&self, degrees: f32, offset: f32) -> u16;
+    fn raw_to_degrees(&self, raw: u16, offset: f32) -> f32;
     fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) -> Result<()>;
+    fn set_operation_mode(&mut self, mode: FeetechOperationMode) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
@@ -243,9 +251,13 @@ impl FeetechSupervisor {
         let actuator = match actuator_type {
             FeetechActuatorType::Sts3215 => Sts3215::new(id),
         };
-        servos.insert(id, Box::new(actuator));
-        drop(servos);
-        self.update_active_servos().await?;
+        if actuator.check_id().is_ok() {
+            servos.insert(id, Box::new(actuator));
+            drop(servos);
+            self.update_active_servos().await?;
+        } else {
+            warn!("Failed to add servo {:?} not responding", id);
+        }
         Ok(())
     }
 
@@ -309,7 +321,7 @@ impl FeetechSupervisor {
         for (id, position) in &self.actuator_desired_positions {
             if let Some(servo) = servos.get(id) {
                 if servo.info().torque_enabled {
-                    let position_raw = servo.degrees_to_raw(*position);
+                    let position_raw = servo.degrees_to_raw(*position, 180.0);
 
                     command.data[index] = *id;
                     index += 1;
