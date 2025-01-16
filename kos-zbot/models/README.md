@@ -32,13 +32,13 @@ Let's say you have a model named 'standing.pt' in the same directory as the `con
 2. **Specifying a different shape via environment variable**:
 
    ```bash
-   MODEL_PATH=./standing.pt MODEL_SHAPE="1,512" ./convert_model.sh
+   MODEL_PATH=./standing.pt MODEL_SHAPE="[1,512]" ./convert_model.sh
    ```
 
 3. **Specifying shape as a command-line argument**:
 
    ```bash
-   MODEL_PATH=./standing.pt ./convert_model.sh "1,1024"
+   MODEL_PATH=./standing.pt ./convert_model.sh "[[1,1024],[1,512]]"
    ```
 
 ## Output
