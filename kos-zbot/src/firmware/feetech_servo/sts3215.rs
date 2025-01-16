@@ -3,10 +3,14 @@ use crate::firmware::feetech::{
     ServoInfo,
 };
 use eyre::{eyre, Result};
+use tracing::debug;
 
 #[allow(dead_code)]
 enum Sts3215Register {
     ID = 0x05,
+    MinAngle = 0x09,
+    MaxAngle = 0x0B,
+    Offset = 0x1F,
     PProportionalCoeff = 0x15,
     DDifferentialCoeff = 0x16,
     IIntegralCoeff = 0x17,
@@ -87,7 +91,7 @@ impl FeetechActuator for Sts3215 {
             0x0000
         };
         let speed_raw = self.degrees_to_raw(abs_speed, 0.0) | sign;
-        println!("Setting speed: {} -> {}", speed_deg_per_s, speed_raw);
+        debug!("Setting speed: {} -> {}", speed_deg_per_s, speed_raw);
         feetech_write(
             self.id,
             Sts3215Register::RunningSpeed as u8,
@@ -189,5 +193,45 @@ impl FeetechActuator for Sts3215 {
         let current = u16::from_le_bytes(current_raw.clone().try_into().unwrap()) as f32 * 6.5;
         println!("Current: {}, raw: {:?}", current, u16::from_le_bytes(current_raw.try_into().unwrap()));
         Ok(current)
+    }
+
+    fn write_calibration_data(&mut self, min_angle: f32, max_angle: f32, offset: f32) -> Result<()> {
+        let min_raw = self.degrees_to_raw(min_angle, 180.0) as i32;
+        let mut max_raw = self.degrees_to_raw(max_angle, 180.0) as i32;
+
+        if max_raw < min_raw {
+            max_raw += 4096;
+        }
+
+        let servo_offset = min_raw + (max_raw - min_raw) / 2 - 2048;
+
+        let servo_offset = if servo_offset < 0 {
+            servo_offset.abs() as u16 | 0x800
+        } else {
+            servo_offset as u16
+        };
+
+        let servo_offset = servo_offset + self.degrees_to_raw(offset, 0.0);
+
+        println!("Writing calibration, offset: {}, min_angle: {}, max_angle: {}", servo_offset, min_raw, max_raw);
+
+        let min_raw = 2048 - (max_raw - min_raw) / 2;
+        let max_raw = 2048 + (max_raw - min_raw) / 2;
+
+        self.unlock_eeprom()?;
+        feetech_write(self.id, Sts3215Register::MinAngle as u8, &min_raw.to_le_bytes())?;
+        feetech_write(self.id, Sts3215Register::MaxAngle as u8, &max_raw.to_le_bytes())?;
+        feetech_write(self.id, Sts3215Register::Offset as u8, &servo_offset.to_le_bytes())?;
+        self.lock_eeprom()?;
+        Ok(())
+    }
+
+    fn set_zero_position(&mut self) -> Result<()> {
+        self.unlock_eeprom()?;
+        feetech_write(self.id, Sts3215Register::MinAngle as u8, &[0x00, 0x00])?;
+        feetech_write(self.id, Sts3215Register::MaxAngle as u8, &[0xFF, 0xFF])?;
+        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x80])?;
+        self.lock_eeprom()?;
+        Ok(())
     }
 }

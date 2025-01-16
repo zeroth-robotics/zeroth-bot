@@ -94,6 +94,12 @@ impl Actuator for ZBotActuator {
                 if p.is_some() || i.is_some() || d.is_some() {
                     let _ = servo.set_pid(p, i, d);
                 }
+
+                if let Some(zero_position) = config.zero_position {
+                    if zero_position {
+                        servo.set_zero_position()?;
+                    }
+                }
                 Ok(())
             } else {
                 Err(eyre::eyre!("Servo not found"))
