@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::os::raw::{c_int, c_short, c_uchar, c_uint, c_ushort};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 const MAX_SHMEM_DATA: usize = 2048;
-const MAX_SERVOS: usize = 32;
+pub const MAX_SERVOS: usize = 32;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -69,15 +69,40 @@ extern "C" {
     fn servo_init() -> c_int;
     fn servo_deinit();
     fn servo_write(id: c_uchar, address: c_uchar, data: *const c_uchar, length: c_uchar) -> c_int;
-    fn servo_read(id: c_uchar, address: c_uchar, length: c_uchar, data: *mut c_uchar) -> c_int;
-    fn servo_set_active_servos(active_servos: ActiveServoList) -> c_int;
-    fn servo_get_info(info_buffer: *mut ServoInfoBuffer) -> c_int;
+    fn servo_read(id: c_uchar, address: c_uchar, data: *mut c_uchar, length: c_uchar) -> c_int;
+    pub fn servo_set_active_servos(active_servos: ActiveServoList) -> c_int;
+    pub fn servo_get_info(info_buffer: *mut ServoInfoBuffer) -> c_int;
     fn servo_broadcast_command(command: BroadcastCommand) -> c_int;
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum FeetechOperationMode {
+    PositionControl,
+    SpeedControl,
+    TorqueControl,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum FeetechActuatorType {
     Sts3215,
+}
+
+impl FeetechActuatorType {
+    pub fn from_model_id(id: &[u8]) -> Option<Self> {
+        if id.len() != 2 {
+            return None;
+        }
+        match (id[0], id[1]) {
+            (0x09, 0x03) => Some(FeetechActuatorType::Sts3215),
+            _ => None,
+        }
+    }
+
+    pub fn model_id(&self) -> [u8; 2] {
+        match self {
+            FeetechActuatorType::Sts3215 => [0x09, 0x03],
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -101,9 +126,13 @@ pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
     fn disable_torque(&mut self) -> Result<()>;
     fn change_id(&mut self, id: u8) -> Result<()>;
     fn update_info(&mut self, info: &ServoInfo);
-    fn degrees_to_raw(&self, degrees: f32) -> u16;
-    fn raw_to_degrees(&self, raw: u16) -> f32;
+    fn degrees_to_raw(&self, degrees: f32, offset: f32) -> u16;
+    fn raw_to_degrees(&self, raw: u16, offset: f32) -> f32;
     fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) -> Result<()>;
+    fn set_operation_mode(&mut self, mode: FeetechOperationMode) -> Result<()>;
+    fn get_current(&self) -> Result<f32>;
+    fn write_calibration_data(&mut self, min_angle: f32, max_angle: f32, offset: f32) -> Result<()>;
+    fn set_zero_position(&mut self) -> Result<()>;
 }
 
 #[derive(Debug, Clone)]
@@ -222,12 +251,24 @@ impl FeetechSupervisor {
 
     pub async fn add_servo(&mut self, id: u8, actuator_type: FeetechActuatorType) -> Result<()> {
         let mut servos = self.servos.write().await;
-        let actuator = match actuator_type {
+        let mut actuator = match actuator_type {
             FeetechActuatorType::Sts3215 => Sts3215::new(id),
         };
-        servos.insert(id, Box::new(actuator));
-        drop(servos);
-        self.update_active_servos().await?;
+        let mut success = false;
+        for _ in 0..10 {
+            if actuator.check_id().is_ok() {
+                success = true;
+                break;
+            }
+        }
+        
+        if success {
+            servos.insert(id, Box::new(actuator));
+            drop(servos);
+            self.update_active_servos().await?;
+        } else {
+            warn!("Failed to add servo {:?} not responding after 10 attempts", id);
+        }
         Ok(())
     }
 
@@ -291,7 +332,7 @@ impl FeetechSupervisor {
         for (id, position) in &self.actuator_desired_positions {
             if let Some(servo) = servos.get(id) {
                 if servo.info().torque_enabled {
-                    let position_raw = servo.degrees_to_raw(*position);
+                    let position_raw = servo.degrees_to_raw(*position, 180.0);
 
                     command.data[index] = *id;
                     index += 1;
@@ -337,9 +378,36 @@ impl Drop for FeetechSupervisor {
 
 pub fn feetech_write(id: u8, address: u8, data: &[u8]) -> Result<()> {
     unsafe {
-        if servo_write(id, address, data.as_ptr(), data.len() as u8) != 0 {
-            return Err(eyre::eyre!("Failed to write to servo"));
+        let result = servo_write(id, address, data.as_ptr(), data.len() as u8);
+        if result != 0 {
+            return Err(eyre::eyre!("Failed to write to servo, result: {}", result));
         }
+    }
+    Ok(())
+}
+
+pub fn feetech_read(id: u8, address: u8, length: u8) -> Result<Vec<u8>> {
+    let mut data = vec![0u8; length as usize];
+    unsafe {
+        if servo_read(id, address, data.as_mut_ptr(), length) != 0 {
+            return Err(eyre::eyre!("Failed to read from servo"));
+        }
+    }
+    Ok(data)
+}
+
+pub fn feetech_init() -> Result<()> {
+    unsafe {
+        if servo_init() != 0 {
+            return Err(eyre::eyre!("Failed to initialize servo system"));
+        }
+    }
+    Ok(())
+}
+
+pub fn feetech_deinit() -> Result<()> {
+    unsafe {
+        servo_deinit();
     }
     Ok(())
 }
