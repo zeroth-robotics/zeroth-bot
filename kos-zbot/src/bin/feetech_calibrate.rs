@@ -1,5 +1,8 @@
+use kos_zbot::feetech::{
+    feetech_deinit, feetech_init, servo_get_info, servo_set_active_servos, ActiveServoList,
+    FeetechActuator, FeetechOperationMode, ServoInfoBuffer, MAX_SERVOS,
+};
 use kos_zbot::feetech_servo::Sts3215;
-use kos_zbot::feetech::{feetech_init, feetech_deinit, servo_get_info, FeetechActuator, FeetechOperationMode, ActiveServoList, servo_set_active_servos, MAX_SERVOS, ServoInfoBuffer};
 use std::env;
 use std::thread::sleep;
 use std::time::Duration;
@@ -38,11 +41,13 @@ fn main() {
     if servo.check_id().is_ok() {
         servo.enable_torque().unwrap();
         sleep(Duration::from_millis(100));
-        
+
         // First direction (negative)
         println!("Moving to first end stop...");
         for _ in 0..10 {
-            servo.set_operation_mode(FeetechOperationMode::SpeedControl).unwrap();
+            servo
+                .set_operation_mode(FeetechOperationMode::SpeedControl)
+                .unwrap();
             servo.set_speed(-15.0).unwrap();
             sleep(Duration::from_millis(20));
         }
@@ -60,7 +65,7 @@ fn main() {
         servo.update_info(&info_buffer.servos[0]);
         let min_position = servo.info.position_deg;
         println!("Min position: {}", min_position);
-        
+
         // Stop and wait
         servo.set_speed(0.0).unwrap();
         sleep(Duration::from_millis(500));
@@ -68,7 +73,9 @@ fn main() {
         // Second direction (positive)
         println!("Moving to second end stop...");
         for _ in 0..10 {
-            servo.set_operation_mode(FeetechOperationMode::SpeedControl).unwrap();
+            servo
+                .set_operation_mode(FeetechOperationMode::SpeedControl)
+                .unwrap();
             servo.set_speed(15.0).unwrap();
             sleep(Duration::from_millis(20));
         }
@@ -88,16 +95,25 @@ fn main() {
         println!("Max position: {}", max_position);
 
         servo.set_speed(0.0).unwrap();
-        
-        println!("Range: {} to {} (total: {})", min_position, max_position, max_position - min_position);
-        
-        servo.write_calibration_data(min_position, max_position, 0.0).unwrap();
 
-        servo.set_operation_mode(FeetechOperationMode::PositionControl).unwrap();
-        
+        println!(
+            "Range: {} to {} (total: {})",
+            min_position,
+            max_position,
+            max_position - min_position
+        );
+
+        servo
+            .write_calibration_data(min_position, max_position, 0.0)
+            .unwrap();
+
+        servo
+            .set_operation_mode(FeetechOperationMode::PositionControl)
+            .unwrap();
+
         println!("Disabling torque...");
         servo.disable_torque().unwrap();
-        
+
         println!("Test complete!");
     } else {
         println!("No servo found at ID {}", id);

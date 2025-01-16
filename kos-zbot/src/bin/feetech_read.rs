@@ -1,5 +1,8 @@
+use kos_zbot::feetech::{
+    feetech_deinit, feetech_init, servo_get_info, servo_set_active_servos, ActiveServoList,
+    FeetechActuator, ServoInfoBuffer, MAX_SERVOS,
+};
 use kos_zbot::feetech_servo::Sts3215;
-use kos_zbot::feetech::{feetech_init, feetech_deinit, servo_get_info, FeetechActuator, ActiveServoList, servo_set_active_servos, MAX_SERVOS, ServoInfoBuffer};
 use std::env;
 use std::thread::sleep;
 use std::time::Duration;
@@ -43,7 +46,11 @@ fn main() {
 
             servo.update_info(&info_buffer.servos[0]);
             let pos = servo.info.position_deg;
-            println!("Position: {}, raw: {}", pos, servo.degrees_to_raw(pos, 180.0));
+            println!(
+                "Position: {}, raw: {}",
+                pos,
+                servo.degrees_to_raw(pos, 180.0)
+            );
             sleep(Duration::from_millis(10));
         }
     }

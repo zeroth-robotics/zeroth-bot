@@ -1,5 +1,5 @@
+use kos_zbot::feetech::{feetech_deinit, feetech_init, FeetechActuator};
 use kos_zbot::feetech_servo::Sts3215;
-use kos_zbot::feetech::{feetech_init, feetech_deinit, FeetechActuator};
 use std::env;
 
 fn main() {
@@ -14,7 +14,7 @@ fn main() {
 
     let mut servo = Sts3215::new(id);
 
-    if servo.check_id().is_ok() {        
+    if servo.check_id().is_ok() {
         servo.write_calibration_data(-180.0, 180.0, 0.0).unwrap();
     } else {
         println!("No servo found at ID {}", id);

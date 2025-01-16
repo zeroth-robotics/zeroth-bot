@@ -131,7 +131,8 @@ pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
     fn set_pid(&mut self, p: Option<f32>, i: Option<f32>, d: Option<f32>) -> Result<()>;
     fn set_operation_mode(&mut self, mode: FeetechOperationMode) -> Result<()>;
     fn get_current(&self) -> Result<f32>;
-    fn write_calibration_data(&mut self, min_angle: f32, max_angle: f32, offset: f32) -> Result<()>;
+    fn write_calibration_data(&mut self, min_angle: f32, max_angle: f32, offset: f32)
+        -> Result<()>;
     fn set_zero_position(&mut self) -> Result<()>;
 }
 
@@ -261,13 +262,16 @@ impl FeetechSupervisor {
                 break;
             }
         }
-        
+
         if success {
             servos.insert(id, Box::new(actuator));
             drop(servos);
             self.update_active_servos().await?;
         } else {
-            warn!("Failed to add servo {:?} not responding after 10 attempts", id);
+            warn!(
+                "Failed to add servo {:?} not responding after 10 attempts",
+                id
+            );
         }
         Ok(())
     }
