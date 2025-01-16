@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use eyre::Result;
+use imu::bno055::{Bno055Reader, OperationMode};
 use kos::{
     hal::{
         EulerAnglesResponse, ImuAdvancedValuesResponse, ImuValuesResponse, Operation,
@@ -7,9 +8,8 @@ use kos::{
     },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
-use imu::bno055::{Bno055Reader, OperationMode};
-use std::time::Duration;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error, info};
 
 pub struct ZBotIMU {

@@ -1,5 +1,5 @@
+use kos_zbot::feetech::{feetech_deinit, feetech_init, feetech_read, FeetechActuatorType};
 use kos_zbot::feetech_servo::Sts3215;
-use kos_zbot::feetech::{feetech_init, feetech_deinit, feetech_read, FeetechActuatorType};
 
 fn main() {
     println!("Scanning for Feetech servos...");

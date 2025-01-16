@@ -49,10 +49,7 @@ impl Platform for ZBotPlatform {
     ) -> Pin<Box<dyn Future<Output = eyre::Result<Vec<ServiceEnum>>> + Send + 'a>> {
         Box::pin(async move {
             let actuator_list = [
-                11, 12, 13, 14,
-                21, 22, 23, 24,
-                31, 32, 33, 34, 35,
-                41, 42, 43, 44, 45,
+                11, 12, 13, 14, 21, 22, 23, 24, 31, 32, 33, 34, 35, 41, 42, 43, 44, 45,
             ];
 
             let actuator = ZBotActuator::new(actuator_list.as_slice()).await?;

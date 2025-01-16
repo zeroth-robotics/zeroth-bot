@@ -1,5 +1,5 @@
+use kos_zbot::feetech::{feetech_deinit, feetech_init, FeetechActuator, FeetechOperationMode};
 use kos_zbot::feetech_servo::Sts3215;
-use kos_zbot::feetech::{feetech_init, feetech_deinit, FeetechActuator, FeetechOperationMode};
 use std::env;
 use std::thread::sleep;
 use std::time::Duration;
@@ -19,13 +19,15 @@ fn main() {
     if servo.check_id().is_ok() {
         println!("Found servo at ID {}", id);
         println!("Testing servo movement...");
-        
+
         println!("Enabling torque...");
         servo.enable_torque().unwrap();
-        
+
         println!("Setting to speed control mode...");
-        servo.set_operation_mode(FeetechOperationMode::SpeedControl).unwrap();
-        
+        servo
+            .set_operation_mode(FeetechOperationMode::SpeedControl)
+            .unwrap();
+
         println!("Running oscillation test (100 cycles)...");
         for i in 0..10 {
             if i % 10 == 0 {
@@ -36,19 +38,21 @@ fn main() {
             servo.set_speed(-20.0).unwrap();
             sleep(Duration::from_millis(200));
         }
-        
+
         println!("Stopping servo...");
         for _ in 0..10 {
             servo.set_speed(0.0).unwrap();
             sleep(Duration::from_millis(10));
         }
-        
+
         println!("Returning to position control mode...");
-        servo.set_operation_mode(FeetechOperationMode::PositionControl).unwrap();
-        
+        servo
+            .set_operation_mode(FeetechOperationMode::PositionControl)
+            .unwrap();
+
         println!("Disabling torque...");
         servo.disable_torque().unwrap();
-        
+
         println!("Test complete!");
     } else {
         println!("No servo found at ID {}", id);

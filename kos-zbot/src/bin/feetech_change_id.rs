@@ -1,5 +1,5 @@
+use kos_zbot::feetech::{feetech_deinit, feetech_init, FeetechActuator};
 use kos_zbot::feetech_servo::Sts3215;
-use kos_zbot::feetech::{FeetechActuator, feetech_init, feetech_deinit};
 use std::env;
 use std::thread;
 use std::time::Duration;
@@ -12,8 +12,12 @@ fn main() {
         return;
     }
 
-    let old_id: u8 = args[1].parse().expect("Old ID must be a number between 1-255");
-    let new_id: u8 = args[2].parse().expect("New ID must be a number between 1-255");
+    let old_id: u8 = args[1]
+        .parse()
+        .expect("Old ID must be a number between 1-255");
+    let new_id: u8 = args[2]
+        .parse()
+        .expect("New ID must be a number between 1-255");
 
     if !(1..=255).contains(&old_id) || !(1..=255).contains(&new_id) {
         println!("IDs must be between 1 and 255");
