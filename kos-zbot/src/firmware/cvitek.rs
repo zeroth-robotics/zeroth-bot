@@ -1,9 +1,9 @@
+use eyre::Result;
+use lazy_static::lazy_static;
 use std::ffi::CString;
 use std::os::raw::{c_char, c_float, c_int};
 use std::path::Path;
-use eyre::Result;
 use std::sync::Mutex;
-use lazy_static::lazy_static;
 
 #[link(name = "cviwrapper")]
 extern "C" {

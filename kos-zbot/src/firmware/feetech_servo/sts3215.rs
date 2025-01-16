@@ -39,12 +39,14 @@ impl Sts3215 {
     }
 
     fn unlock_eeprom(&mut self) -> Result<()> {
-        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x00]).map_err(|e| eyre!("Failed to unlock EEPROM: {}", e))?;
+        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x00])
+            .map_err(|e| eyre!("Failed to unlock EEPROM: {}", e))?;
         Ok(())
     }
 
     fn lock_eeprom(&mut self) -> Result<()> {
-        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x01]).map_err(|e| eyre!("Failed to lock EEPROM: {}", e))?;
+        feetech_write(self.id, Sts3215Register::LockMark as u8, &[0x01])
+            .map_err(|e| eyre!("Failed to lock EEPROM: {}", e))?;
         Ok(())
     }
 }
@@ -60,7 +62,8 @@ impl FeetechActuator for Sts3215 {
 
     fn set_position(&mut self, position_deg: f32) -> Result<()> {
         let raw = self.degrees_to_raw(position_deg);
-        feetech_write(self.id, Sts3215Register::TargetLocation as u8, &[raw as u8]).map_err(|e| eyre!("Failed to set position: {}", e))?;
+        feetech_write(self.id, Sts3215Register::TargetLocation as u8, &[raw as u8])
+            .map_err(|e| eyre!("Failed to set position: {}", e))?;
         Ok(())
     }
 
@@ -70,20 +73,23 @@ impl FeetechActuator for Sts3215 {
 
     fn enable_torque(&mut self) -> Result<()> {
         self.info.torque_enabled = true;
-        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x01]).map_err(|e| eyre!("Failed to enable torque: {}", e))?;
+        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x01])
+            .map_err(|e| eyre!("Failed to enable torque: {}", e))?;
         Ok(())
     }
 
     fn disable_torque(&mut self) -> Result<()> {
         self.info.torque_enabled = false;
-        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x00]).map_err(|e| eyre!("Failed to disable torque: {}", e))?;
+        feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x00])
+            .map_err(|e| eyre!("Failed to disable torque: {}", e))?;
         Ok(())
     }
 
     fn change_id(&mut self, id: u8) -> Result<()> {
         // TODO: verification and prechecks
         self.unlock_eeprom()?;
-        feetech_write(self.id, Sts3215Register::ID as u8, &[id]).map_err(|e| eyre!("Failed to change ID: {}", e))?;
+        feetech_write(self.id, Sts3215Register::ID as u8, &[id])
+            .map_err(|e| eyre!("Failed to change ID: {}", e))?;
         self.lock_eeprom()?;
         self.id = id;
         Ok(())
