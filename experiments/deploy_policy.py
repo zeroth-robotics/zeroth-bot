@@ -34,6 +34,20 @@ def get_gravity_orientation(quaternion):
     return gravity_orientation
 
 
+ACTIONS_OUTPUT_ORDER = {
+    10: "L_Hip_Roll",
+    9: "L_Hip_Yaw",
+    8: "L_Hip_Pitch",
+    7: "L_Knee_Pitch",
+    6: "L_Ankle_Pitch",
+    5: "R_Hip_Roll",
+    4: "R_Hip_Yaw",
+    3: "R_Hip_Pitch",
+    2: "R_Knee_Pitch",
+    1: "R_Ankle_Pitch",
+}
+
+
 ID_TO_JOINT_NAME = {
     1: "R_Ankle_Pitch",
     2: "R_Knee_Pitch",
@@ -53,12 +67,24 @@ ID_TO_JOINT_NAME = {
     16: "L_Elbow_Pitch",
 }
 
+MOTOR_SIGNS = {
+    "R_Ankle_Pitch": 1,
+    "R_Knee_Pitch": 1,
+    "R_Hip_Pitch": 1,
+    "R_Hip_Yaw": 1,
+    "R_Hip_Roll": 1,
+    "L_Ankle_Pitch": 1,
+    "L_Knee_Pitch": 1,
+    "L_Hip_Pitch": 1,
+    "L_Hip_Yaw": -1,
+    "L_Hip_Roll": 1,
+}
+
 
 class RealPPOController:
     def __init__(
             self, 
             model_path: str,
-            joint_mapping_signs: np.ndarray,
             kos: pykos.KOS = None,
             logger: logging.Logger = None,
         ) -> None:
@@ -72,12 +98,10 @@ class RealPPOController:
 
         # Walking command defaults
         self.command = {
-            "x_vel": 0.4,
+            "x_vel": 0.3,
             "y_vel": 0.0,
             "rot": 0.0,
         }
-
-        self.joint_mapping_signs = joint_mapping_signs
 
         # Get model metadata
         self.kinfer = ONNXModel(model_path)
@@ -95,31 +119,34 @@ class RealPPOController:
         self.left_arm_ids = [14, 15, 16]
         self.right_arm_ids = [11, 12, 13]
         
-        
         self.left_leg_ids = [10, 9, 8, 7, 6]
         self.right_leg_ids = [5, 4, 3, 2, 1]
-
         self.all_ids = self.left_leg_ids + self.right_leg_ids
+
+        self.joint_mapping_signs = np.array([MOTOR_SIGNS[ID_TO_JOINT_NAME[id]] for id in self.all_ids])
 
         self.model_info["default_standing"] = np.array([0.0, 0.0, -0.377, 0.796, 0.377, 0.0, 0.0, 0.377, -0.796, -0.377])
 
         for id in self.all_ids:
             self.kos.actuator.configure_actuator(id, kp=32, kd=32, torque_enabled=True)
 
-        # self.initial_offsets = []
-        # for id in self.all_ids:
-        #     self.initial_offsets.append(np.deg2rad(self.kos.actuator.get_actuators_state([id])[0].position))
-        # print(f"Initial offsets: {self.initial_offsets}")
+        self.initial_offsets = []
+        for id in self.all_ids:
+            self.initial_offsets.append(np.deg2rad(self.kos.actuator.get_actuators_state([id])[0].position))
+        print(f"Initial offsets: {self.initial_offsets}")
 
         # self.initial_offsets = np.array(self.initial_offsets)
 
-        self.initial_offsets = np.array([-0.09203884727313848, -0.8697671067311585, -0.018407769454627694, -0.8375535101855601, 0.10584467436410924, -0.02454369260617026, 0.8406214717613314, 0.20708740636456155, -0.6611457195787114, -0.11504855909142309])
+        # self.initial_offsets = np.array([-0.09203884727313848, -0.8697671067311585, -0.018407769454627694, -0.8375535101855601, 0.10584467436410924, -0.02454369260617026, 0.8406214717613314, 0.20708740636456155, -0.6611457195787114, -0.11504855909142309])
+        self.initial_offsets = np.array(
+            [-0.09203884727313848, -0.8697671067311585, -0.018407769454627694, -0.8375535101855601, 0.10584467436410924,
+             -0.02454369260617026, 0.8406214717613314, 0.20708740636456155, -0.6611457195787114, -0.11504855909142309
+            ]
+        )
         self.set_initial_offsets()
 
         # Adjust for the sign of each joint
-        self.left_offsets = self.joint_mapping_signs[:5] * np.array(self.model_info["default_standing"][:5])
-        self.right_offsets = self.joint_mapping_signs[5:] * np.array(self.model_info["default_standing"][5:])
-        self.standing_offsets = np.concatenate([self.left_offsets, self.right_offsets])
+        self.standing_offsets = self.joint_mapping_signs * self.model_info["default_standing"]
         self.offsets = self.initial_offsets + self.standing_offsets  # in radians
         print(f"Offsets: {self.offsets}")
 
@@ -185,9 +212,9 @@ class RealPPOController:
 
         # TODO - check this against mujoco
         # pfb30
-        # quaternion = self.kos.imu.get_quaternion()
-        # projected_gravity = get_gravity_orientation([quaternion.w, quaternion.x, quaternion.y, quaternion.z])
-        # projected_gravity = np.array([projected_gravity[0], projected_gravity[2], projected_gravity[1]])
+        imu = self.kos.imu.get_imu_advanced_values()
+        zbot_grav_x, zbot_grav_y, zbot_grav_z = imu.grav_x, imu.grav_y, imu.grav_z
+        projected_gravity = -(1 / 9.8) * np.array([zbot_grav_z, zbot_grav_x, zbot_grav_y])
         projected_gravity = np.array([0.0, 0.0, -1.0])
 
         # Update input dictionary
@@ -268,11 +295,9 @@ def main() -> None:
 
     args.ip = "10.33.85.3"
     kos = pykos.KOS(args.ip)
-    motor_signs = np.array([1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
 
     controller = RealPPOController(
         model_path=args.model,
-        joint_mapping_signs=motor_signs,
         kos=kos,
         logger=logger,
     )
@@ -289,7 +314,7 @@ def main() -> None:
             print(f"Time taken: {time.time() - loop_start_time}")
             time.sleep(max(0, controller.frequency - (time.time() - loop_start_time)))
 
-            if counter > 500: # 1 second out
+            if counter > 750: # 1 second out
                 raise RuntimeError("1 second out")
 
     except KeyboardInterrupt:
