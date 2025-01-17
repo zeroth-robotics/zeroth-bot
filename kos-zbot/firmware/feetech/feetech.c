@@ -129,7 +129,7 @@ int servo_write(uint8_t id, uint8_t address, uint8_t *data, uint8_t length) {
     return perform_mailbox_operation(SYS_CMD_SERVO_WRITE, sizeof(ServoCommand));
 }
 
-int servo_read(uint8_t id, uint8_t address, uint8_t length, uint8_t *data) {
+int servo_read(uint8_t id, uint8_t address, uint8_t *data, uint8_t length) {
     typedef struct {
         uint8_t id;
         uint8_t address;
@@ -147,7 +147,7 @@ int servo_read(uint8_t id, uint8_t address, uint8_t length, uint8_t *data) {
     }
 
     memcpy(data, shared_mem + 5, length);
-    return 0;
+    return ((uint8_t *)shared_mem)[4];
 }
 
 int servo_set_active_servos(ActiveServoList active_servos) {

@@ -68,7 +68,7 @@ enum SYS_CMD_ID {
 int servo_write(uint8_t id, uint8_t address, uint8_t *data, uint8_t length);
 
 // Read data from a servo
-int servo_read(uint8_t id, uint8_t address, uint8_t length, uint8_t *data);
+int servo_read(uint8_t id, uint8_t address, uint8_t *data, uint8_t length);
 
 int servo_set_active_servos(ActiveServoList active_servos);
 
