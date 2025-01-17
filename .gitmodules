@@ -16,9 +16,6 @@
 [submodule "kos-zbot/tonic"]
 	path = kos-zbot/tonic
 	url = https://github.com/hyperium/tonic.git
-[submodule "client-py"]
-	path = client-py
-	url = https://github.com/zeroth-robotics/client-py
 [submodule "buildroot"]
 	path = buildroot
 	url = https://github.com/zeroth-robotics/buildroot
