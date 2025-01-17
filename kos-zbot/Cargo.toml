@@ -8,7 +8,7 @@ repository = "https://github.com/zeroth-robotics/zeroth-bot"
 description = "KOS platform for Zeroth-01"
 
 [dependencies]
-kos = {version = "0.5.0", git = "https://github.com/kscalelabs/kos", branch = "pykos-inference"}
+kos = "0.5"
 async-trait = "0.1"
 eyre = "0.6"
 serde = { version = "1.0", features = ["derive"] }
