@@ -1,23 +1,21 @@
 use crate::Model;
+use crate::Model as CvitekModel;
 use eyre::Result;
 use kos::hal::Inference;
-use kos::kos_proto::common::ErrorCode;
-use kos::kos_proto::common::{ActionResponse, Error};
-use kos::kos_proto::inference::get_models_info_request::Filter;
-use kos::kos_proto::inference::ModelUids;
-use kos::kos_proto::inference::*;
-use kos::kos_proto::inference::Tensor as ProtoTensor;
-use kos::kos_proto::inference::tensor::Dimension as ProtoDimension;
+use kos::kos_proto::common::{ActionResponse, Error, ErrorCode};
+use kos::kos_proto::inference::{
+    get_models_info_request::Filter, tensor::Dimension as ProtoDimension, ForwardResponse,
+    GetModelsInfoRequest, GetModelsInfoResponse, LoadModelsResponse, ModelInfo, ModelMetadata,
+    ModelUids, Tensor, Tensor as ProtoTensor, UploadModelResponse,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use uuid::Uuid;
-use crate::Model as CvitekModel;
 
 const MODELS_DIR: &'static str = "/opt/models";
 const METADATA_FILE: &'static str = "/opt/models/metadata.json";
@@ -221,40 +219,52 @@ impl ZBotInference {
         let input_specs = input_info
             .into_iter()
             .map(|info| {
-                let dims = info.shape.into_iter().map(|s| ProtoDimension {
-                    size: s as u32,
-                    name: info.name.clone(),
-                    dynamic: false,
-                }).collect();
+                let dims = info
+                    .shape
+                    .into_iter()
+                    .map(|s| ProtoDimension {
+                        size: s as u32,
+                        name: info.name.clone(),
+                        dynamic: false,
+                    })
+                    .collect();
 
-                (info.name.clone(), Tensor {
-                    values: Vec::new(),
-                    shape: dims,
-                })
+                (
+                    info.name.clone(),
+                    Tensor {
+                        values: Vec::new(),
+                        shape: dims,
+                    },
+                )
             })
             .collect();
 
         let output_specs = output_info
             .into_iter()
             .map(|info| {
-                let dims = info.shape.into_iter().map(|s| ProtoDimension {
-                    size: s as u32,
-                    name: info.name.clone(),
-                    dynamic: false,
-                }).collect();
+                let dims = info
+                    .shape
+                    .into_iter()
+                    .map(|s| ProtoDimension {
+                        size: s as u32,
+                        name: info.name.clone(),
+                        dynamic: false,
+                    })
+                    .collect();
 
-                (info.name.clone(), Tensor {
-                    values: Vec::new(),
-                    shape: dims,
-                })
+                (
+                    info.name.clone(),
+                    Tensor {
+                        values: Vec::new(),
+                        shape: dims,
+                    },
+                )
             })
             .collect();
 
         Ok(ModelInfo {
             uid: uid.to_string(),
-            metadata: Some(ModelMetadata::from(
-                metadata.cloned().unwrap_or_default(),
-            )),
+            metadata: Some(ModelMetadata::from(metadata.cloned().unwrap_or_default())),
             input_specs,
             output_specs,
             description: String::new(),
@@ -382,7 +392,11 @@ impl Inference for ZBotInference {
                 Err(e) => {
                     error!("Failed to fetch input info for {}: {}", uid, e);
                     // Return an error, or skip this model. Here we choose to fail immediately:
-                    return Err(eyre::eyre!("Failed to get input info for model {}: {}", uid, e));
+                    return Err(eyre::eyre!(
+                        "Failed to get input info for model {}: {}",
+                        uid,
+                        e
+                    ));
                 }
             };
 
@@ -391,7 +405,11 @@ impl Inference for ZBotInference {
                 Ok(info) => info,
                 Err(e) => {
                     error!("Failed to fetch output info for {}: {}", uid, e);
-                    return Err(eyre::eyre!("Failed to get output info for model {}: {}", uid, e));
+                    return Err(eyre::eyre!(
+                        "Failed to get output info for model {}: {}",
+                        uid,
+                        e
+                    ));
                 }
             };
 
@@ -400,20 +418,22 @@ impl Inference for ZBotInference {
                 .into_iter()
                 .map(|info| {
                     // Turn the shape[i32] into repeated Dimension
-                    let dims = info.shape.into_iter().map(|dim_i32| {
-                        ProtoDimension {
+                    let dims = info
+                        .shape
+                        .into_iter()
+                        .map(|dim_i32| ProtoDimension {
                             size: dim_i32 as u32,
                             name: String::new(),
                             dynamic: false,
-                        }
-                    }).collect();
+                        })
+                        .collect();
 
                     (
                         info.name.clone(),
                         Tensor {
                             values: Vec::new(), // We only store shape for specs
                             shape: dims,
-                        }
+                        },
                     )
                 })
                 .collect::<std::collections::HashMap<_, _>>();
@@ -422,20 +442,22 @@ impl Inference for ZBotInference {
             let output_specs = output_info
                 .into_iter()
                 .map(|info| {
-                    let dims = info.shape.into_iter().map(|dim_i32| {
-                        ProtoDimension {
+                    let dims = info
+                        .shape
+                        .into_iter()
+                        .map(|dim_i32| ProtoDimension {
                             size: dim_i32 as u32,
                             name: String::new(),
                             dynamic: false,
-                        }
-                    }).collect();
+                        })
+                        .collect();
 
                     (
                         info.name.clone(),
                         Tensor {
                             values: Vec::new(),
                             shape: dims,
-                        }
+                        },
                     )
                 })
                 .collect::<std::collections::HashMap<_, _>>();
@@ -555,7 +577,7 @@ impl Inference for ZBotInference {
             }
         };
 
-        // Convert ProtoTensor to raw Vec<f32>
+        // Convert Tensor to raw Vec<f32>
         let mut cvitek_inputs: HashMap<String, Vec<f32>> = HashMap::new();
         for (name, tensor) in &inputs {
             cvitek_inputs.insert(name.clone(), tensor.values.clone());
@@ -597,11 +619,14 @@ impl Inference for ZBotInference {
         let mut final_outputs = HashMap::new();
         for (name, values) in inference_result {
             let shape = if let Some(ti) = output_info_map.get(&name) {
-                ti.shape.iter().map(|&s| ProtoDimension {
-                    size: s as u32,
-                    name: String::new(),
-                    dynamic: false,
-                }).collect()
+                ti.shape
+                    .iter()
+                    .map(|&s| ProtoDimension {
+                        size: s as u32,
+                        name: String::new(),
+                        dynamic: false,
+                    })
+                    .collect()
             } else {
                 Vec::new()
             };

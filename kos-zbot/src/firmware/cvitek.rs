@@ -9,10 +9,14 @@ use std::sync::Mutex;
 #[link(name = "cviwrapper")]
 extern "C" {
     fn init_model(model_path: *const c_char) -> c_int;
-    fn forward(input_data: *const *const c_float, input_count: c_int, 
-               output_data: *const *mut c_float, output_count: c_int) -> c_int;
+    fn forward(
+        input_data: *const *const c_float,
+        input_count: c_int,
+        output_data: *const *mut c_float,
+        output_count: c_int,
+    ) -> c_int;
     fn cleanup();
-    
+
     // Input/output information functions
     fn get_input_count() -> c_int;
     fn get_output_count() -> c_int;
@@ -61,17 +65,23 @@ impl Model {
                 if name_ptr.is_null() {
                     return Err(eyre::eyre!("Failed to get input name at index {}", i));
                 }
-                std::ffi::CStr::from_ptr(name_ptr).to_string_lossy().into_owned()
+                std::ffi::CStr::from_ptr(name_ptr)
+                    .to_string_lossy()
+                    .into_owned()
             };
 
-            let input = inputs.get(&name).ok_or_else(|| 
-                eyre::eyre!("Missing input tensor: {}", name))?;
+            let input = inputs
+                .get(&name)
+                .ok_or_else(|| eyre::eyre!("Missing input tensor: {}", name))?;
 
-            let expected_size = unsafe { get_input_size_at(i as c_int) } / std::mem::size_of::<f32>();
+            let expected_size =
+                unsafe { get_input_size_at(i as c_int) } / std::mem::size_of::<f32>();
             if input.len() != expected_size {
                 return Err(eyre::eyre!(
-                    "Input '{}' size mismatch: expected {}, got {}", 
-                    name, expected_size, input.len()
+                    "Input '{}' size mismatch: expected {}, got {}",
+                    name,
+                    expected_size,
+                    input.len()
                 ));
             }
 
@@ -111,7 +121,9 @@ impl Model {
                 if name_ptr.is_null() {
                     return Err(eyre::eyre!("Failed to get output name at index {}", i));
                 }
-                std::ffi::CStr::from_ptr(name_ptr).to_string_lossy().into_owned()
+                std::ffi::CStr::from_ptr(name_ptr)
+                    .to_string_lossy()
+                    .into_owned()
             };
             outputs.insert(name, output_data[i].clone());
         }
@@ -138,9 +150,8 @@ impl Model {
 
             let mut dims = [0i32; 6];
             let mut dim_count: usize = 0;
-            let shape_result = unsafe {
-                get_input_shape_at(i as c_int, dims.as_mut_ptr(), &mut dim_count)
-            };
+            let shape_result =
+                unsafe { get_input_shape_at(i as c_int, dims.as_mut_ptr(), &mut dim_count) };
             if shape_result != 0 {
                 eyre::bail!("Failed to get input shape at index {}", i);
             }
@@ -175,15 +186,14 @@ impl Model {
 
             let mut dims = [0i32; 6];
             let mut dim_count: usize = 0;
-            let shape_result = unsafe {
-                get_output_shape_at(i as c_int, dims.as_mut_ptr(), &mut dim_count)
-            };
+            let shape_result =
+                unsafe { get_output_shape_at(i as c_int, dims.as_mut_ptr(), &mut dim_count) };
             if shape_result != 0 {
                 eyre::bail!("Failed to get output shape at index {}", i);
             }
 
             info.push(TensorInfo {
-                name,  // Use the actual tensor name from the model
+                name, // Use the actual tensor name from the model
                 shape: dims[..dim_count].to_vec(),
                 size,
             });
