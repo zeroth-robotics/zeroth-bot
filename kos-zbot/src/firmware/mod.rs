@@ -3,4 +3,4 @@ pub mod feetech_servo;
 
 mod cvitek;
 
-pub use cvitek::Model;
+pub use cvitek::{TensorInfo, Model};

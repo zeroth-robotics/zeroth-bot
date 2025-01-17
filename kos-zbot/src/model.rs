@@ -6,6 +6,8 @@ use kos::kos_proto::common::{ActionResponse, Error};
 use kos::kos_proto::inference::get_models_info_request::Filter;
 use kos::kos_proto::inference::ModelUids;
 use kos::kos_proto::inference::*;
+use kos::kos_proto::inference::Tensor as ProtoTensor;
+use kos::kos_proto::inference::tensor::Dimension as ProtoDimension;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
@@ -15,6 +17,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info};
 use uuid::Uuid;
+use crate::Model as CvitekModel;
 
 const MODELS_DIR: &'static str = "/opt/models";
 const METADATA_FILE: &'static str = "/opt/models/metadata.json";
@@ -61,7 +64,7 @@ impl Default for SerializableModelMetadata {
 }
 
 pub struct ZBotInference {
-    loaded_models: Arc<RwLock<HashMap<String, Model>>>,
+    loaded_models: Arc<RwLock<HashMap<String, CvitekModel>>>,
     available_models: Arc<RwLock<HashMap<String, SerializableModelMetadata>>>,
 }
 
@@ -204,6 +207,59 @@ impl ZBotInference {
         models.insert(uid.to_string(), model);
         Ok(())
     }
+
+    // Helper method to create ModelInfo from a loaded model
+    fn create_model_info(
+        &self,
+        uid: &str,
+        model: &CvitekModel,
+        metadata: Option<&SerializableModelMetadata>,
+    ) -> Result<ModelInfo> {
+        let input_info = model.get_input_info()?;
+        let output_info = model.get_output_info()?;
+
+        let input_specs = input_info
+            .into_iter()
+            .map(|info| {
+                let dims = info.shape.into_iter().map(|s| ProtoDimension {
+                    size: s as u32,
+                    name: info.name.clone(),
+                    dynamic: false,
+                }).collect();
+
+                (info.name.clone(), Tensor {
+                    values: Vec::new(),
+                    shape: dims,
+                })
+            })
+            .collect();
+
+        let output_specs = output_info
+            .into_iter()
+            .map(|info| {
+                let dims = info.shape.into_iter().map(|s| ProtoDimension {
+                    size: s as u32,
+                    name: info.name.clone(),
+                    dynamic: false,
+                }).collect();
+
+                (info.name.clone(), Tensor {
+                    values: Vec::new(),
+                    shape: dims,
+                })
+            })
+            .collect();
+
+        Ok(ModelInfo {
+            uid: uid.to_string(),
+            metadata: Some(ModelMetadata::from(
+                metadata.cloned().unwrap_or_default(),
+            )),
+            input_specs,
+            output_specs,
+            description: String::new(),
+        })
+    }
 }
 
 #[async_trait::async_trait]
@@ -315,34 +371,96 @@ impl Inference for ZBotInference {
         let models = self.loaded_models.read().await;
         let available = self.available_models.read().await;
 
-        let mut response = LoadModelsResponse {
-            models: models
-                .keys()
-                .map(|uid| ModelInfo {
-                    uid: uid.clone(),
-                    metadata: Some(ModelMetadata::from(
-                        available.get(uid).cloned().unwrap_or_default(),
-                    )),
+        // Build a list of ModelInfo objects, one for each loaded model
+        let mut model_infos = Vec::new();
+        for uid in models.keys() {
+            let model = models.get(uid).unwrap();
+
+            // Retrieve input_info
+            let input_info = match model.get_input_info() {
+                Ok(info) => info,
+                Err(e) => {
+                    error!("Failed to fetch input info for {}: {}", uid, e);
+                    // Return an error, or skip this model. Here we choose to fail immediately:
+                    return Err(eyre::eyre!("Failed to get input info for model {}: {}", uid, e));
+                }
+            };
+
+            // Retrieve output_info
+            let output_info = match model.get_output_info() {
+                Ok(info) => info,
+                Err(e) => {
+                    error!("Failed to fetch output info for {}: {}", uid, e);
+                    return Err(eyre::eyre!("Failed to get output info for model {}: {}", uid, e));
+                }
+            };
+
+            // Convert input_info to input_specs
+            let input_specs = input_info
+                .into_iter()
+                .map(|info| {
+                    // Turn the shape[i32] into repeated Dimension
+                    let dims = info.shape.into_iter().map(|dim_i32| {
+                        ProtoDimension {
+                            size: dim_i32 as u32,
+                            name: String::new(),
+                            dynamic: false,
+                        }
+                    }).collect();
+
+                    (
+                        info.name.clone(),
+                        Tensor {
+                            values: Vec::new(), // We only store shape for specs
+                            shape: dims,
+                        }
+                    )
                 })
-                .collect(),
+                .collect::<std::collections::HashMap<_, _>>();
+
+            // Convert output_info to output_specs
+            let output_specs = output_info
+                .into_iter()
+                .map(|info| {
+                    let dims = info.shape.into_iter().map(|dim_i32| {
+                        ProtoDimension {
+                            size: dim_i32 as u32,
+                            name: String::new(),
+                            dynamic: false,
+                        }
+                    }).collect();
+
+                    (
+                        info.name.clone(),
+                        Tensor {
+                            values: Vec::new(),
+                            shape: dims,
+                        }
+                    )
+                })
+                .collect::<std::collections::HashMap<_, _>>();
+
+            // Build the ModelInfo
+            let metadata = Some(ModelMetadata::from(
+                available.get(uid).cloned().unwrap_or_default(),
+            ));
+            model_infos.push(ModelInfo {
+                uid: uid.clone(),
+                metadata,
+                input_specs,
+                output_specs,
+                description: String::new(),
+            });
+        }
+
+        // Construct final response
+        let response = LoadModelsResponse {
+            models: model_infos,
             result: Some(ActionResponse {
                 success: true,
                 error: None,
             }),
         };
-
-        if !skipped_uids.is_empty() {
-            if let Some(result) = response.result.as_mut() {
-                result.success = true;
-                result.error = Some(Error {
-                    code: ErrorCode::InvalidArgument as i32,
-                    message: format!(
-                        "Some models were already loaded: {}",
-                        skipped_uids.join(", ")
-                    ),
-                });
-            }
-        }
 
         Ok(response)
     }
@@ -378,6 +496,7 @@ impl Inference for ZBotInference {
     ) -> Result<GetModelsInfoResponse> {
         debug!("Getting models info");
         let metadata = self.available_models.read().await;
+        let loaded_models = self.loaded_models.read().await;
 
         let model_infos = match request.filter {
             Some(Filter::ModelUids(ModelUids { uids })) => {
@@ -391,22 +510,23 @@ impl Inference for ZBotInference {
                     });
                 }
 
-                uids.iter()
-                    .map(|uid| ModelInfo {
-                        uid: uid.clone(),
-                        metadata: Some(ModelMetadata::from(
-                            metadata.get(uid).cloned().unwrap_or_default(),
-                        )),
-                    })
-                    .collect()
+                let mut infos = Vec::new();
+                for uid in uids {
+                    if let Some(model) = loaded_models.get(&uid) {
+                        infos.push(self.create_model_info(&uid, model, metadata.get(&uid))?);
+                    }
+                }
+                infos
             }
-            Some(Filter::All(_)) | None => metadata
-                .iter()
-                .map(|(uid, meta)| ModelInfo {
-                    uid: uid.clone(),
-                    metadata: Some(ModelMetadata::from(meta.clone())),
-                })
-                .collect(),
+            Some(Filter::All(_)) | None => {
+                let mut infos = Vec::new();
+                for (uid, _) in metadata.iter() {
+                    if let Some(model) = loaded_models.get(uid) {
+                        infos.push(self.create_model_info(uid, model, metadata.get(uid))?);
+                    }
+                }
+                infos
+            }
         };
 
         Ok(GetModelsInfoResponse {
@@ -415,34 +535,83 @@ impl Inference for ZBotInference {
         })
     }
 
-    async fn forward(&self, model_uid: String, inputs: Vec<f32>) -> Result<ForwardResponse> {
+    async fn forward(
+        &self,
+        model_uid: String,
+        inputs: HashMap<String, ProtoTensor>,
+    ) -> Result<ForwardResponse> {
         let models = self.loaded_models.read().await;
 
-        if let Some(model) = models.get(&model_uid) {
-            match model.infer(&inputs) {
-                Ok(outputs) => Ok(ForwardResponse {
-                    outputs,
-                    error: None,
-                }),
-                Err(e) => {
-                    error!("Inference failed: {}", e);
-                    Ok(ForwardResponse {
-                        outputs: vec![],
-                        error: Some(Error {
-                            code: ErrorCode::HardwareFailure as i32,
-                            message: format!("Inference failed: {}", e),
-                        }),
-                    })
-                }
+        let model = match models.get(&model_uid) {
+            Some(m) => m,
+            None => {
+                return Ok(ForwardResponse {
+                    outputs: HashMap::new(),
+                    error: Some(Error {
+                        code: ErrorCode::InvalidArgument as i32,
+                        message: format!("Model {} not found", model_uid),
+                    }),
+                });
             }
-        } else {
-            Ok(ForwardResponse {
-                outputs: vec![],
-                error: Some(Error {
-                    code: ErrorCode::InvalidArgument as i32,
-                    message: format!("Model {} not found", model_uid),
-                }),
-            })
+        };
+
+        // Convert ProtoTensor to raw Vec<f32>
+        let mut cvitek_inputs: HashMap<String, Vec<f32>> = HashMap::new();
+        for (name, tensor) in &inputs {
+            cvitek_inputs.insert(name.clone(), tensor.values.clone());
         }
+
+        let inference_result = match model.infer(cvitek_inputs) {
+            Ok(outputs) => outputs,
+            Err(e) => {
+                error!("Inference failed: {:?}", e);
+                return Ok(ForwardResponse {
+                    outputs: HashMap::new(),
+                    error: Some(Error {
+                        code: ErrorCode::HardwareFailure as i32,
+                        message: format!("Inference failed: {:?}", e),
+                    }),
+                });
+            }
+        };
+
+        let output_meta = match model.get_output_info() {
+            Ok(info) => info,
+            Err(e) => {
+                error!("Failed to retrieve output tensor info: {}", e);
+                return Ok(ForwardResponse {
+                    outputs: HashMap::new(),
+                    error: Some(Error {
+                        code: ErrorCode::HardwareFailure as i32,
+                        message: format!("Failed to retrieve output metadata: {}", e),
+                    }),
+                });
+            }
+        };
+
+        let mut output_info_map = HashMap::new();
+        for ti in output_meta {
+            output_info_map.insert(ti.name.clone(), ti);
+        }
+
+        let mut final_outputs = HashMap::new();
+        for (name, values) in inference_result {
+            let shape = if let Some(ti) = output_info_map.get(&name) {
+                ti.shape.iter().map(|&s| ProtoDimension {
+                    size: s as u32,
+                    name: String::new(),
+                    dynamic: false,
+                }).collect()
+            } else {
+                Vec::new()
+            };
+
+            final_outputs.insert(name, Tensor { values, shape });
+        }
+
+        Ok(ForwardResponse {
+            outputs: final_outputs,
+            error: None,
+        })
     }
 }

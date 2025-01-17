@@ -931,9 +931,8 @@ dependencies = [
 
 [[package]]
 name = "kos"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22092cac8fdaf9d92a8635bb35fd5a8e5eab48be075572aa6487f62a565a8304"
+version = "0.5.0"
+source = "git+https://github.com/kscalelabs/kos?branch=pykos-inference#086abd452bd8ed6c7ee887c1cf39d3bf951e6a1b"
 dependencies = [
  "async-trait",
  "base64",
@@ -952,8 +951,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tonic",
- "tonic-build",
+ "tonic 0.12.3 (git+https://github.com/kscalelabs/tonic-milkv)",
+ "tonic-build 0.12.3 (git+https://github.com/kscalelabs/tonic-milkv)",
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
@@ -974,8 +973,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
- "tonic",
- "tonic-build",
+ "tonic 0.12.3 (git+https://github.com/hatomist/tonic-milkv)",
+ "tonic-build 0.12.3 (git+https://github.com/hatomist/tonic-milkv)",
  "tracing",
  "uuid",
 ]
@@ -1949,9 +1948,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "tonic"
+version = "0.12.3"
+source = "git+https://github.com/kscalelabs/tonic-milkv#8aa1c2914c49ad15c5b91b1a66f965defdcea2af"
+dependencies = [
+ "async-stream",
+ "async-trait",
+ "axum",
+ "base64",
+ "bytes",
+ "h2",
+ "http 1.2.0",
+ "http-body 1.0.1",
+ "http-body-util",
+ "hyper 1.5.2",
+ "hyper-timeout",
+ "hyper-util",
+ "percent-encoding",
+ "pin-project",
+ "prost 0.13.4",
+ "socket2",
+ "tokio",
+ "tokio-stream",
+ "tower",
+ "tower-layer",
+ "tower-service",
+ "tracing",
+]
+
+[[package]]
 name = "tonic-build"
 version = "0.12.3"
 source = "git+https://github.com/hatomist/tonic-milkv#8aa1c2914c49ad15c5b91b1a66f965defdcea2af"
+dependencies = [
+ "prettyplease",
+ "proc-macro2",
+ "prost-build 0.13.4",
+ "prost-types 0.13.4",
+ "quote",
+ "syn 2.0.95",
+]
+
+[[package]]
+name = "tonic-build"
+version = "0.12.3"
+source = "git+https://github.com/kscalelabs/tonic-milkv#8aa1c2914c49ad15c5b91b1a66f965defdcea2af"
 dependencies = [
  "prettyplease",
  "proc-macro2",
