@@ -1,22 +1,29 @@
 mod actuator;
 mod firmware;
 mod imu;
+mod led_matrix;
 mod model;
 
 pub use actuator::*;
 pub use firmware::*;
 pub use imu::*;
+pub use led_matrix::*;
 pub use model::*;
 
 use kos::{
     kos_proto::actuator::actuator_service_server::ActuatorServiceServer,
     kos_proto::imu::imu_service_server::ImuServiceServer,
     kos_proto::inference::inference_service_server::InferenceServiceServer,
-    services::{ActuatorServiceImpl, IMUServiceImpl, InferenceServiceImpl, OperationsServiceImpl},
+    kos_proto::led_matrix::led_matrix_service_server::LedMatrixServiceServer,
+    services::{
+        ActuatorServiceImpl, IMUServiceImpl, InferenceServiceImpl, LEDMatrixServiceImpl,
+        OperationsServiceImpl,
+    },
     Platform, ServiceEnum,
 };
 use std::{future::Future, pin::Pin, sync::Arc};
 use tonic::async_trait;
+use tracing::error;
 
 pub struct ZBotPlatform {}
 
@@ -79,7 +86,18 @@ impl Platform for ZBotPlatform {
                     )));
                 }
                 Err(e) => {
-                    eprintln!("Failed to initialize Inference: {}", e);
+                    error!("Failed to initialize Inference: {}", e);
+                }
+            }
+
+            match ZBotLEDMatrix::new("/dev/i2c-1") {
+                Ok(led_matrix) => {
+                    services.push(ServiceEnum::LEDMatrix(LedMatrixServiceServer::new(
+                        LEDMatrixServiceImpl::new(Arc::new(led_matrix)),
+                    )));
+                }
+                Err(e) => {
+                    error!("Failed to initialize LEDMatrix: {}", e);
                 }
             }
 
