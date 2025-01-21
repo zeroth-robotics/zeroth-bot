@@ -110,6 +110,7 @@ class RealPPOController:
             model_path: str,
             kos: pykos.KOS = None,
             logger: logging.Logger = None,
+            disable_torque: bool = False,
         ) -> None:
 
         if kos is None:
@@ -121,8 +122,8 @@ class RealPPOController:
 
         # Walking command defaults
         self.command = {
-            "x_vel": 0.15,
-            "y_vel": 0.0,
+            "x_vel": 0,
+            "y_vel": -0.15,
             "rot": 0.0,
         }
 
@@ -147,11 +148,9 @@ class RealPPOController:
 
         self.model_info["default_standing"] = np.array([0.0, 0.0, -0.377, 0.796, 0.377, 0.0, 0.0, 0.377, -0.796, -0.377])
 
-        # self.kos.actuator.configure_actuator(actuator_id=id, kp=32, kd=32, torque_enabled=False)
-
         for id in self.all_ids:
-            self.kos.actuator.configure_actuator(actuator_id=id, kp=32, kd=32, torque_enabled=True)
-            # self.kos.actuator.configure_actuator(actuator_id=id, kp=32, kd=32, torque_enabled=True, zero_position=True)
+            # self.kos.actuator.configure_actuator(actuator_id=id, kp=70, kd=32, torque_enabled=True)
+            self.kos.actuator.configure_actuator(actuator_id=id, kp=90, kd=32, torque_enabled=True, zero_position=True)
 
         self.initial_offsets = []
 
@@ -161,7 +160,6 @@ class RealPPOController:
         self.initial_offsets = np.array([0 for ii in range(10)])
 
         self.set_initial_offsets()
-        self.set_zero_position()
 
         # Adjust for the sign of each joint
         self.standing_offsets = self.joint_mapping_signs * self.model_info["default_standing"]
@@ -184,6 +182,7 @@ class RealPPOController:
         # Track previous actions and buffer for recurrent state
         self.actions = np.zeros(self.model_info["num_actions"], dtype=np.float32)
         self.buffer = np.zeros(self.model_info["num_observations"], dtype=np.float32)
+
         breakpoint()
         self.set_default_position()
         time.sleep(1)
@@ -232,6 +231,7 @@ class RealPPOController:
         imu = self.kos.imu.get_imu_advanced_values()
         zbot_grav_x, zbot_grav_y, zbot_grav_z = imu.grav_x, imu.grav_y, imu.grav_z
         projected_gravity = -(1 / 9.8) * np.array([zbot_grav_z, zbot_grav_x, zbot_grav_y])
+        print(projected_gravity)
         projected_gravity = np.array([0.0, 0.0, -1.0])
 
         # Update input dictionary
@@ -300,6 +300,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="zbot_walking_armature_friction.kinfer")
     parser.add_argument("--ip", type=str, default="192.168.42.1")
+    parser.add_argument("--d_torque", type=bool, default=False)
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -311,6 +312,7 @@ def main() -> None:
         model_path=args.model,
         kos=kos,
         logger=logger,
+        disable_torque=args.d_torque,
     )
 
     time.sleep(1)
