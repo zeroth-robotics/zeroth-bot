@@ -49,23 +49,46 @@ ACTIONS_OUTPUT_ORDER = {
 
 
 ID_TO_JOINT_NAME = {
-    1: "R_Ankle_Pitch",
-    2: "R_Knee_Pitch",
-    3: "R_Hip_Pitch",
-    4: "R_Hip_Yaw",
-    5: "R_Hip_Roll",
-    6: "L_Ankle_Pitch",
-    7: "L_Knee_Pitch",
-    8: "L_Hip_Pitch",
-    9: "L_Hip_Yaw",
-    10: "L_Hip_Roll",
-    11: "R_Elbow_Pitch",
-    12: "R_Shoulder_Pitch",
-    13: "R_Shoulder_Yaw",
-    14: "L_Shoulder_Yaw",
-    15: "L_Shoulder_Pitch",
-    16: "L_Elbow_Pitch",
+    # "left_hip_yaw": 31,
+    # "left_hip_roll": 32,
+    # "left_hip_pitch": 33,
+    # "left_knee_pitch": 34,
+    # "left_ankle_pitch": 35,
+    # "right_hip_yaw": 41,
+    # "right_hip_roll": 42,
+    # "right_hip_pitch": 43,
+    # "right_knee_pitch": 44,
+    # "right_ankle_pitch": 45,
+    31: "L_Hip_Yaw",
+    32: "L_Hip_Roll",
+    33: "L_Hip_Pitch",
+    34: "L_Knee_Pitch",
+    35: "L_Ankle_Pitch",
+    41: "R_Hip_Yaw",
+    42: "R_Hip_Roll",
+    43: "R_Hip_Pitch",
+    44: "R_Knee_Pitch",
+    45: "R_Ankle_Pitch",
 }
+
+# ID_TO_JOINT_NAME = {
+#     1: "R_Ankle_Pitch",
+#     2: "R_Knee_Pitch",
+#     3: "R_Hip_Pitch",
+#     4: "R_Hip_Yaw",
+#     5: "R_Hip_Roll",
+#     6: "L_Ankle_Pitch",
+#     7: "L_Knee_Pitch",
+#     8: "L_Hip_Pitch",
+#     9: "L_Hip_Yaw",
+#     10: "L_Hip_Roll",
+#     11: "R_Elbow_Pitch",
+#     12: "R_Shoulder_Pitch",
+#     13: "R_Shoulder_Yaw",
+#     14: "L_Shoulder_Yaw",
+#     15: "L_Shoulder_Pitch",
+#     16: "L_Elbow_Pitch",
+# }
 
 MOTOR_SIGNS = {
     "R_Ankle_Pitch": 1,
@@ -98,7 +121,7 @@ class RealPPOController:
 
         # Walking command defaults
         self.command = {
-            "x_vel": 0.3,
+            "x_vel": 0.15,
             "y_vel": 0.0,
             "rot": 0.0,
         }
@@ -116,34 +139,29 @@ class RealPPOController:
         }
         self.frequency = metadata["sim_dt"] * metadata["sim_decimation"]
 
-        self.left_arm_ids = [14, 15, 16]
-        self.right_arm_ids = [11, 12, 13]
-        
-        self.left_leg_ids = [10, 9, 8, 7, 6]
-        self.right_leg_ids = [5, 4, 3, 2, 1]
+        self.left_leg_ids = [32, 31, 33, 34, 35]
+        self.right_leg_ids = [42, 41, 43, 44, 45]
         self.all_ids = self.left_leg_ids + self.right_leg_ids
 
         self.joint_mapping_signs = np.array([MOTOR_SIGNS[ID_TO_JOINT_NAME[id]] for id in self.all_ids])
 
         self.model_info["default_standing"] = np.array([0.0, 0.0, -0.377, 0.796, 0.377, 0.0, 0.0, 0.377, -0.796, -0.377])
 
+        # self.kos.actuator.configure_actuator(actuator_id=id, kp=32, kd=32, torque_enabled=False)
+
         for id in self.all_ids:
-            self.kos.actuator.configure_actuator(id, kp=32, kd=32, torque_enabled=True)
+            self.kos.actuator.configure_actuator(actuator_id=id, kp=32, kd=32, torque_enabled=True)
+            # self.kos.actuator.configure_actuator(actuator_id=id, kp=32, kd=32, torque_enabled=True, zero_position=True)
 
         self.initial_offsets = []
+
         for id in self.all_ids:
-            self.initial_offsets.append(np.deg2rad(self.kos.actuator.get_actuators_state([id])[0].position))
+            self.initial_offsets.append(np.deg2rad(self.kos.actuator.get_actuators_state([id]).states[0].position))
         print(f"Initial offsets: {self.initial_offsets}")
+        self.initial_offsets = np.array([0 for ii in range(10)])
 
-        # self.initial_offsets = np.array(self.initial_offsets)
-
-        # self.initial_offsets = np.array([-0.09203884727313848, -0.8697671067311585, -0.018407769454627694, -0.8375535101855601, 0.10584467436410924, -0.02454369260617026, 0.8406214717613314, 0.20708740636456155, -0.6611457195787114, -0.11504855909142309])
-        self.initial_offsets = np.array(
-            [-0.09203884727313848, -0.8697671067311585, -0.018407769454627694, -0.8375535101855601, 0.10584467436410924,
-             -0.02454369260617026, 0.8406214717613314, 0.20708740636456155, -0.6611457195787114, -0.11504855909142309
-            ]
-        )
         self.set_initial_offsets()
+        self.set_zero_position()
 
         # Adjust for the sign of each joint
         self.standing_offsets = self.joint_mapping_signs * self.model_info["default_standing"]
@@ -166,7 +184,7 @@ class RealPPOController:
         # Track previous actions and buffer for recurrent state
         self.actions = np.zeros(self.model_info["num_actions"], dtype=np.float32)
         self.buffer = np.zeros(self.model_info["num_observations"], dtype=np.float32)
-
+        breakpoint()
         self.set_default_position()
         time.sleep(1)
 
@@ -178,8 +196,7 @@ class RealPPOController:
 
     def update_robot_state(self) -> None:
         """Update input data from robot sensors"""
-
-        motor_feedback = self.kos.actuator.get_actuators_state(self.all_ids)
+        motor_feedback = self.kos.actuator.get_actuators_state(actuator_ids=self.all_ids).states
 
         # Create dictionary of motor feedback to motor id
         self.motor_feedback_dict = {
@@ -224,15 +241,10 @@ class RealPPOController:
         self.input_data["prev_actions.1"] = self.actions
         self.input_data["buffer.1"] = self.buffer
 
-    def get_offsets(self) -> np.ndarray:
-        for id in self.all_ids:
-            self.initial_offsets.append(np.deg2rad(self.kos.actuator.get_actuators_state([id])[0].position))
-        print(f"Offsets: {self.initial_offsets}")
-
     def zero_position(self) -> None:
         """Zero out the position of the robot"""
         for id in self.all_ids:
-            self.kos.actuator.configure_actuator(id, torque_enabled=False)
+            self.kos.actuator.configure_actuator(actuator_id=id, torque_enabled=False)
 
     def set_default_position(self) -> None:
         """Set the robot to the default position!"""
@@ -293,7 +305,6 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
-    args.ip = "10.33.85.3"
     kos = pykos.KOS(args.ip)
 
     controller = RealPPOController(
@@ -314,7 +325,7 @@ def main() -> None:
             print(f"Time taken: {time.time() - loop_start_time}")
             time.sleep(max(0, controller.frequency - (time.time() - loop_start_time)))
 
-            if counter > 750: # 1 second out
+            if counter > 1000: # 1 second out
                 raise RuntimeError("1 second out")
 
     except KeyboardInterrupt:
