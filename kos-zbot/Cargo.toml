@@ -19,6 +19,7 @@ tokio = { version = "1", features = ["full"] }
 imu = "0.2"
 i2cdev = "0.6.1"
 tracing = "0.1"
+tracing-subscriber = "0.3"
 fs2 = "0.4.3"
 lazy_static = "1.5"
 uuid = { version = "1.12", features = ["v4"] }

@@ -134,7 +134,7 @@ impl Actuator for ZBotActuator {
                 let info = servo.info();
                 states.push(ActuatorStateResponse {
                     actuator_id: id,
-                    online: true,
+                    online: info.online,
                     position: Some(info.position_deg as f64),
                     velocity: Some(info.speed_deg_per_s as f64),
                     torque: Some(info.load_percent as f64),

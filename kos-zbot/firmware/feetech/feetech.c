@@ -126,7 +126,11 @@ int servo_write(uint8_t id, uint8_t address, uint8_t *data, uint8_t length) {
     cmd->length = length;
     memcpy(cmd->data, data, length);
 
-    return perform_mailbox_operation(SYS_CMD_SERVO_WRITE, sizeof(ServoCommand));
+    int ret = -1;
+    
+    perform_mailbox_operation(SYS_CMD_SERVO_WRITE, sizeof(ServoCommand));
+    memcpy(&ret, shared_mem, sizeof(int));
+    return ret;
 }
 
 int servo_read(uint8_t id, uint8_t address, uint8_t *data, uint8_t length) {

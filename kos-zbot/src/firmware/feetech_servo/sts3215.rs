@@ -3,7 +3,7 @@ use crate::firmware::feetech::{
     ServoInfo,
 };
 use eyre::{eyre, Result};
-use tracing::debug;
+use tracing::{trace, debug};
 
 #[allow(dead_code)]
 enum Sts3215Register {
@@ -155,6 +155,16 @@ impl FeetechActuator for Sts3215 {
         self.info.voltage_v = info.current_voltage as f32 / 10.0;
         self.info.current_ma = info.current_current as f32 / 100.0 * 6.5;
         self.info.temperature_c = info.current_temperature as f32;
+
+        if self.info.last_read_ms - info.last_read_ms > 50 {
+            if self.info.online {
+                debug!("Servo {} is not responding", self.id);
+            }
+            self.info.online = false;
+        } else {
+            self.info.online = true;
+        }
+        self.info.last_read_ms = info.last_read_ms;
     }
 
     fn degrees_to_raw(&self, degrees: f32, offset: f32) -> u16 {
@@ -222,7 +232,7 @@ impl FeetechActuator for Sts3215 {
 
         let servo_offset = servo_offset + self.degrees_to_raw(offset, 0.0);
 
-        println!(
+        trace!(
             "Writing calibration, offset: {}, min_angle: {}, max_angle: {}",
             servo_offset, min_raw, max_raw
         );
@@ -230,22 +240,32 @@ impl FeetechActuator for Sts3215 {
         let min_raw = 2048 - (max_raw - min_raw) / 2;
         let max_raw = 2048 + (max_raw - min_raw) / 2;
 
+        let min_raw: u16 = std::cmp::max(0, min_raw) as u16;
+        let max_raw: u16 = std::cmp::min(4095, max_raw) as u16;
+
+        trace!("unlocking EEPROM");
         self.unlock_eeprom()?;
+        trace!("writing min angle");
         feetech_write(
             self.id,
             Sts3215Register::MinAngle as u8,
             &min_raw.to_le_bytes(),
         )?;
+        trace!("writing max angle");
         feetech_write(
             self.id,
             Sts3215Register::MaxAngle as u8,
             &max_raw.to_le_bytes(),
         )?;
+        trace!("writing offset");
         feetech_write(
             self.id,
             Sts3215Register::Offset as u8,
             &servo_offset.to_le_bytes(),
         )?;
+        trace!("writing operation mode");
+        feetech_write(self.id, Sts3215Register::OperationMode as u8, &[0x00])?;
+        trace!("locking EEPROM");
         self.lock_eeprom()?;
         Ok(())
     }
@@ -254,6 +274,7 @@ impl FeetechActuator for Sts3215 {
         self.unlock_eeprom()?;
         feetech_write(self.id, Sts3215Register::MinAngle as u8, &[0x00, 0x00])?;
         feetech_write(self.id, Sts3215Register::MaxAngle as u8, &[0xFF, 0xFF])?;
+        self.set_operation_mode(FeetechOperationMode::PositionControl)?;
         feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x80])?;
         self.lock_eeprom()?;
         Ok(())
