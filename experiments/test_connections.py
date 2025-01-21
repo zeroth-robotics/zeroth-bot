@@ -24,6 +24,7 @@ ID_TO_JOINT_NAME = {
 
 JOINT_NAME_TO_ID = {v: k for k, v in ID_TO_JOINT_NAME.items()}
 
+print("Connection started")
 kos = pykos.KOS("192.168.42.1")
 
 for i in range(1, 17):  

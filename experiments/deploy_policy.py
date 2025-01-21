@@ -122,8 +122,8 @@ class RealPPOController:
 
         # Walking command defaults
         self.command = {
-            "x_vel": 0,
-            "y_vel": -0.15,
+            "x_vel": 0.7,
+            "y_vel": 0.0,
             "rot": 0.0,
         }
 
@@ -146,11 +146,22 @@ class RealPPOController:
 
         self.joint_mapping_signs = np.array([MOTOR_SIGNS[ID_TO_JOINT_NAME[id]] for id in self.all_ids])
 
-        self.model_info["default_standing"] = np.array([0.0, 0.0, -0.377, 0.796, 0.377, 0.0, 0.0, 0.377, -0.796, -0.377])
-
+        self.model_info["default_standing"] = np.array([
+            0.2,    # L_Hip_Roll
+            0.05,    # L_Hip_Yaw  
+            -0.377, # L_Hip_Pitch
+            0.796,  # L_Knee_Pitch
+            0.377,  # L_Ankle_Pitch
+            -0.2,    # R_Hip_Roll
+            -0.05,    # R_Hip_Yaw
+            0.377,  # R_Hip_Pitch
+            -0.796, # R_Knee_Pitch  
+            -0.377  # R_Ankle_Pitch
+        ])
+        
         for id in self.all_ids:
             # self.kos.actuator.configure_actuator(actuator_id=id, kp=70, kd=32, torque_enabled=True)
-            self.kos.actuator.configure_actuator(actuator_id=id, kp=90, kd=32, torque_enabled=True, zero_position=True)
+            self.kos.actuator.configure_actuator(actuator_id=id, kp=100, kd=32, torque_enabled=True, zero_position=False)
 
         self.initial_offsets = []
 
@@ -299,7 +310,7 @@ class RealPPOController:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="zbot_walking_armature_friction.kinfer")
-    parser.add_argument("--ip", type=str, default="192.168.42.1")
+    parser.add_argument("--ip", type=str, default="10.33.10.63")
     parser.add_argument("--d_torque", type=bool, default=False)
     args = parser.parse_args()
 
