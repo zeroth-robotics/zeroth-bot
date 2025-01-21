@@ -122,7 +122,7 @@ class RealPPOController:
 
         # Walking command defaults
         self.command = {
-            "x_vel": 0.7,
+            "x_vel": 0.4,
             "y_vel": 0.0,
             "rot": 0.0,
         }
@@ -147,13 +147,13 @@ class RealPPOController:
         self.joint_mapping_signs = np.array([MOTOR_SIGNS[ID_TO_JOINT_NAME[id]] for id in self.all_ids])
 
         self.model_info["default_standing"] = np.array([
-            0.2,    # L_Hip_Roll
-            0.05,    # L_Hip_Yaw  
+            0.00,    # L_Hip_Roll
+            0.00,    # L_Hip_Yaw  
             -0.377, # L_Hip_Pitch
             0.796,  # L_Knee_Pitch
             0.377,  # L_Ankle_Pitch
-            -0.2,    # R_Hip_Roll
-            -0.05,    # R_Hip_Yaw
+            -0.00,    # R_Hip_Roll
+            -0.00,    # R_Hip_Yaw
             0.377,  # R_Hip_Pitch
             -0.796, # R_Knee_Pitch  
             -0.377  # R_Ankle_Pitch
@@ -161,7 +161,7 @@ class RealPPOController:
         
         for id in self.all_ids:
             # self.kos.actuator.configure_actuator(actuator_id=id, kp=70, kd=32, torque_enabled=True)
-            self.kos.actuator.configure_actuator(actuator_id=id, kp=100, kd=32, torque_enabled=True, zero_position=False)
+            self.kos.actuator.configure_actuator(actuator_id=id, kp=70, kd=32, torque_enabled=True, zero_position=False)
 
         self.initial_offsets = []
 
@@ -199,6 +199,9 @@ class RealPPOController:
         time.sleep(1)
 
         print('Default position set')
+
+        # Add a scaling factor as an attribute
+        self.pitch_scale = 1
 
     def set_initial_offsets(self) -> None:
         for idx, id in enumerate(self.all_ids):
@@ -239,10 +242,10 @@ class RealPPOController:
 
         # TODO - check this against mujoco
         # pfb30
-        imu = self.kos.imu.get_imu_advanced_values()
-        zbot_grav_x, zbot_grav_y, zbot_grav_z = imu.grav_x, imu.grav_y, imu.grav_z
-        projected_gravity = -(1 / 9.8) * np.array([zbot_grav_z, zbot_grav_x, zbot_grav_y])
-        print(projected_gravity)
+        # imu = self.kos.imu.get_imu_advanced_values()
+        # zbot_grav_x, zbot_grav_y, zbot_grav_z = imu.grav_x, imu.grav_y, imu.grav_z
+        # projected_gravity = -(1 / 9.8) * np.array([zbot_grav_z, zbot_grav_x, zbot_grav_y])
+        # print(projected_gravity)
         projected_gravity = np.array([0.0, 0.0, -1.0])
 
         # Update input dictionary
@@ -280,22 +283,28 @@ class RealPPOController:
 
         self.kos.actuator.command_actuators(actuator_commands)
 
-    def step(self, time: float) -> np.ndarray:
+    def step(self, time_freq: float) -> np.ndarray:
         """Run one control step!"""
         # Update command velocities
         self.input_data["x_vel.1"][0] = np.float32(self.command["x_vel"])
         self.input_data["y_vel.1"][0] = np.float32(self.command["y_vel"])
         self.input_data["rot.1"][0] = np.float32(self.command["rot"])
-        self.input_data["t.1"][0] = np.float32(self.frequency * time)
+        self.input_data["t.1"][0] = np.float32(self.frequency * time_freq)
 
         # Update robot state
+        time_start = time.time()
         self.update_robot_state()
+        time_end = time.time()
+        # print(f"Time taken update robot state: {time_end - time_start}")
 
         # Run inference
         outputs = self.kinfer(self.input_data)
 
         # Extract outputs
         positions = outputs["actions_scaled"]
+
+        # **Multiply knee and hip pitch by 1.5**
+        positions[[2, 3, 7, 8]] *= self.pitch_scale
 
         self.actions = outputs["actions"]
         self.buffer = outputs["x.3"]
@@ -304,13 +313,17 @@ class RealPPOController:
 
         expected_positions = positions + self.offsets  # in radians
 
+        time_start = time.time()
         self.move_actuators(np.rad2deg(expected_positions))
+        time_end = time.time()
+        # print(f"Time taken move actuators: {time_end - time_start}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, default="zbot_walking_armature_friction.kinfer")
-    parser.add_argument("--ip", type=str, default="10.33.10.63")
+    # parser.add_argument("--ip", type=str, default="10.33.10.63")
+    parser.add_argument("--ip", type=str, default="192.168.42.1")
     parser.add_argument("--d_torque", type=bool, default=False)
     args = parser.parse_args()
 
@@ -335,8 +348,10 @@ def main() -> None:
             loop_start_time = time.time()
             controller.step(counter)
             counter += 1
-            print(f"Time taken: {time.time() - loop_start_time}")
-            time.sleep(max(0, controller.frequency - (time.time() - loop_start_time)))
+            sleep_time = max(0, controller.frequency - (time.time() - loop_start_time))
+            
+            print(f"Time taken: {time.time() - loop_start_time}, sleep time: {sleep_time}")
+            time.sleep(sleep_time)
 
             if counter > 1000: # 1 second out
                 raise RuntimeError("1 second out")
