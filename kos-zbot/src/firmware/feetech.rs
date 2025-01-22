@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::os::raw::{c_int, c_short, c_uchar, c_uint, c_ushort};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, trace};
+use tracing::{info, trace, warn};
 const MAX_SHMEM_DATA: usize = 2048;
 pub const MAX_SERVOS: usize = 32;
 
@@ -108,7 +108,7 @@ impl FeetechActuatorType {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct FeetechActuatorInfo {
     pub id: u8,
     pub torque_enabled: bool,
@@ -119,7 +119,9 @@ pub struct FeetechActuatorInfo {
     pub current_ma: f32,
     pub temperature_c: f32,
     pub last_read_ms: u32,
+    pub last_read_local_ms: u32,
     pub online: bool,
+    pub faults: Vec<String>,
 }
 
 pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
@@ -304,8 +306,9 @@ impl FeetechSupervisor {
         {
             // New scope to ensure servos lock is dropped
             let mut servos = self.servos.write().await;
-            let servo = servos.get_mut(&id).ok_or_else(|| 
-                eyre::eyre!("Servo with id {} not found", id))?;
+            let servo = servos
+                .get_mut(&id)
+                .ok_or_else(|| eyre::eyre!("Servo with id {} not found", id))?;
             servo.disable_torque()?;
         } // servos lock is dropped here
         self.broadcast_command().await?;
@@ -316,8 +319,9 @@ impl FeetechSupervisor {
         {
             // New scope to ensure servos lock is dropped
             let mut servos = self.servos.write().await;
-            let servo = servos.get_mut(&id).ok_or_else(|| 
-                eyre::eyre!("Servo with id {} not found", id))?;
+            let servo = servos
+                .get_mut(&id)
+                .ok_or_else(|| eyre::eyre!("Servo with id {} not found", id))?;
             servo.enable_torque()?;
             self.actuator_desired_positions.remove(&id);
         } // servos lock is dropped here
@@ -391,30 +395,40 @@ impl Drop for FeetechSupervisor {
 }
 
 pub fn feetech_write(id: u8, address: u8, data: &[u8]) -> Result<()> {
-    trace!("feetech_write: id: {}, address: {}, data: {:?}", id, address, data);
+    trace!(
+        "feetech_write: id: {}, address: {}, data: {:?}",
+        id,
+        address,
+        data
+    );
     let mut attempts = 0;
     const MAX_ATTEMPTS: u8 = 15;
-    
+
     loop {
-        let result = unsafe {
-            servo_write(id, address, data.as_ptr(), data.len() as u8)
-        };
-        
+        let result = unsafe { servo_write(id, address, data.as_ptr(), data.len() as u8) };
+
         if result == 0 {
             break;
         }
-        
+
         attempts += 1;
-        trace!("Write failed (attempt {}/{}): servo id: {}, address: {}, result: {}", 
-            attempts, MAX_ATTEMPTS, id, address, result);
-        
+        trace!(
+            "Write failed (attempt {}/{}): servo id: {}, address: {}, result: {}",
+            attempts,
+            MAX_ATTEMPTS,
+            id,
+            address,
+            result
+        );
+
         if attempts >= MAX_ATTEMPTS {
             return Err(eyre::eyre!(
-                "Failed to write to servo after {} attempts, last result: {}", 
-                MAX_ATTEMPTS, result
+                "Failed to write to servo after {} attempts, last result: {}",
+                MAX_ATTEMPTS,
+                result
             ));
         }
-        
+
         std::thread::sleep(std::time::Duration::from_nanos(200));
     }
     Ok(())
@@ -425,28 +439,38 @@ pub fn feetech_read(id: u8, address: u8, length: u8) -> Result<Vec<u8>> {
     let mut attempts = 0;
     const MAX_ATTEMPTS: u8 = 15;
 
-    trace!("feetech_read: id: {}, address: {}, length: {}", id, address, length);
-    
+    trace!(
+        "feetech_read: id: {}, address: {}, length: {}",
+        id,
+        address,
+        length
+    );
+
     loop {
-        let result = unsafe {
-            servo_read(id, address, data.as_mut_ptr(), length)
-        };
-        
+        let result = unsafe { servo_read(id, address, data.as_mut_ptr(), length) };
+
         if result == 0 {
             break;
         }
-        
+
         attempts += 1;
-        trace!("Read failed (attempt {}/{}): servo id: {}, address: {}, result: {}", 
-            attempts, MAX_ATTEMPTS, id, address, result);
-        
+        trace!(
+            "Read failed (attempt {}/{}): servo id: {}, address: {}, result: {}",
+            attempts,
+            MAX_ATTEMPTS,
+            id,
+            address,
+            result
+        );
+
         if attempts >= MAX_ATTEMPTS {
             return Err(eyre::eyre!(
-                "Failed to read from servo after {} attempts, last result: {}", 
-                MAX_ATTEMPTS, result
+                "Failed to read from servo after {} attempts, last result: {}",
+                MAX_ATTEMPTS,
+                result
             ));
         }
-        
+
         std::thread::sleep(std::time::Duration::from_nanos(200));
     }
     Ok(data)

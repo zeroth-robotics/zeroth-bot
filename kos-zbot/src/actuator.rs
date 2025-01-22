@@ -141,6 +141,7 @@ impl Actuator for ZBotActuator {
                     temperature: Some(info.temperature_c as f64),
                     voltage: Some(info.voltage_v),
                     current: Some(info.current_ma), // Convert mA to A
+                    faults: info.faults,
                 });
             } else {
                 states.push(ActuatorStateResponse {
@@ -152,6 +153,7 @@ impl Actuator for ZBotActuator {
                     temperature: None,
                     voltage: None,
                     current: None,
+                    faults: Vec::new(),
                 });
             }
         }

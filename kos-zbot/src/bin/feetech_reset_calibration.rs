@@ -6,7 +6,6 @@ use tracing_subscriber::prelude::*;
 use tracing_subscriber::Layer;
 
 fn main() {
-
     let subscriber = tracing_subscriber::registry();
 
     let stdout_layer = tracing_subscriber::fmt::layer()

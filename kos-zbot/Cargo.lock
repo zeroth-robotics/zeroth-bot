@@ -980,9 +980,9 @@ dependencies = [
 
 [[package]]
 name = "kos"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "087021269947a4b0ec085bad681ce88100385716f53f4a2e1a0161f65774e044"
+checksum = "416f101b67714838117eeecf6f563877771c944f7e75395a75d6504de67658cb"
 dependencies = [
  "async-stream",
  "async-trait",

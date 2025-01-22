@@ -3,7 +3,7 @@ use crate::firmware::feetech::{
     ServoInfo,
 };
 use eyre::{eyre, Result};
-use tracing::{trace, debug};
+use tracing::{debug, trace, warn};
 
 #[allow(dead_code)]
 enum Sts3215Register {
@@ -32,7 +32,7 @@ enum Sts3215Register {
     CurrentCurrent = 0x45,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Sts3215 {
     pub id: u8,
     pub info: FeetechActuatorInfo,
@@ -65,6 +65,29 @@ impl Sts3215 {
         }
         Ok(())
     }
+
+    fn status_to_faults(&self, status: u8) -> Vec<String> {
+        let mut faults = Vec::new();
+        if status & (1 << 0) != 0 {
+            faults.push("Voltage".to_string());
+        }
+        if status & (1 << 1) != 0 {
+            faults.push("Sensor".to_string());
+        }
+        if status & (1 << 2) != 0 {
+            faults.push("Temperature".to_string());
+        }
+        if status & (1 << 3) != 0 {
+            faults.push("Current".to_string());
+        }
+        if status & (1 << 4) != 0 {
+            faults.push("Angle".to_string());
+        }
+        if status & (1 << 5) != 0 {
+            faults.push("Overload".to_string());
+        }
+        faults
+    }
 }
 
 impl FeetechActuator for Sts3215 {
@@ -73,7 +96,7 @@ impl FeetechActuator for Sts3215 {
     }
 
     fn info(&self) -> FeetechActuatorInfo {
-        self.info
+        self.info.clone()
     }
 
     fn set_position(&mut self, position_deg: f32) -> Result<()> {
@@ -156,15 +179,25 @@ impl FeetechActuator for Sts3215 {
         self.info.current_ma = info.current_current as f32 / 100.0 * 6.5;
         self.info.temperature_c = info.current_temperature as f32;
 
-        if self.info.last_read_ms - info.last_read_ms > 50 {
+        let current_time_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u32;
+
+        if self.info.last_read_ms == info.last_read_ms
+            && current_time_ms - self.info.last_read_local_ms > 100
+        {
             if self.info.online {
-                debug!("Servo {} is not responding", self.id);
+                warn!("Servo {} is not responding", self.id);
             }
             self.info.online = false;
-        } else {
+        } else if self.info.last_read_ms != info.last_read_ms {
             self.info.online = true;
+            self.info.last_read_local_ms = current_time_ms;
+            self.info.last_read_ms = info.last_read_ms;
         }
-        self.info.last_read_ms = info.last_read_ms;
+
+        self.info.faults = self.status_to_faults(info.servo_status);
     }
 
     fn degrees_to_raw(&self, degrees: f32, offset: f32) -> u16 {
@@ -234,7 +267,9 @@ impl FeetechActuator for Sts3215 {
 
         trace!(
             "Writing calibration, offset: {}, min_angle: {}, max_angle: {}",
-            servo_offset, min_raw, max_raw
+            servo_offset,
+            min_raw,
+            max_raw
         );
 
         let min_raw = 2048 - (max_raw - min_raw) / 2;
