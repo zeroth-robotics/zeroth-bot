@@ -3,6 +3,8 @@ use crate::firmware::feetech::{
     ServoInfo,
 };
 use eyre::{eyre, Result};
+use std::thread;
+use std::time::Duration;
 use tracing::{debug, trace, warn};
 
 #[allow(dead_code)]
@@ -308,9 +310,13 @@ impl FeetechActuator for Sts3215 {
     fn set_zero_position(&mut self) -> Result<()> {
         self.unlock_eeprom()?;
         feetech_write(self.id, Sts3215Register::MinAngle as u8, &[0x00, 0x00])?;
-        feetech_write(self.id, Sts3215Register::MaxAngle as u8, &[0xFF, 0xFF])?;
+        thread::sleep(Duration::from_millis(10));
+        feetech_write(self.id, Sts3215Register::MaxAngle as u8, &[0x0F, 0xFF])?;
+        thread::sleep(Duration::from_millis(10));
         self.set_operation_mode(FeetechOperationMode::PositionControl)?;
+        thread::sleep(Duration::from_millis(10));
         feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x80])?;
+        thread::sleep(Duration::from_millis(10));
         self.lock_eeprom()?;
         Ok(())
     }

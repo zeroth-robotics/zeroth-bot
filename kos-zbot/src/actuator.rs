@@ -27,6 +27,29 @@ impl ZBotActuator {
             supervisor: Arc::new(RwLock::new(supervisor)),
         })
     }
+
+    fn to_action_response<E: std::fmt::Display>(result: Result<(), E>) -> ActionResponse {
+        match result {
+            Ok(()) => ActionResponse {
+                success: true,
+                error: None,
+            },
+            Err(e) => ActionResponse {
+                success: false,
+                error: Some(KosError {
+                    code: ErrorCode::HardwareFailure as i32,
+                    message: e.to_string(),
+                }),
+            },
+        }
+    }
+
+    fn success_response() -> ActionResponse {
+        ActionResponse {
+            success: true,
+            error: None,
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -70,54 +93,42 @@ impl Actuator for ZBotActuator {
     async fn configure_actuator(&self, config: ConfigureActuatorRequest) -> Result<ActionResponse> {
         let mut supervisor = self.supervisor.write().await;
 
-        let result = {
-            let id = config.actuator_id as u8;
+        let id = config.actuator_id as u8;
 
-            if let Some(torque_enabled) = config.torque_enabled {
-                if torque_enabled {
-                    supervisor.enable_torque(id).await?;
-                } else {
-                    supervisor.disable_torque(id).await?;
-                }
-            }
-
-            if let Some(new_actuator_id) = config.new_actuator_id {
-                supervisor.change_id(id, new_actuator_id as u8).await?;
-            }
-
-            let mut servos = supervisor.servos.write().await;
-            if let Some(servo) = servos.get_mut(&id) {
-                // Set PID values if provided
-                let p = config.kp.map(|v| v as f32);
-                let i = config.ki.map(|v| v as f32);
-                let d = config.kd.map(|v| v as f32);
-                if p.is_some() || i.is_some() || d.is_some() {
-                    let _ = servo.set_pid(p, i, d);
-                }
-
-                if let Some(zero_position) = config.zero_position {
-                    if zero_position {
-                        servo.set_zero_position()?;
-                    }
-                }
-                Ok(())
+        if let Some(torque_enabled) = config.torque_enabled {
+            let result = if torque_enabled {
+                supervisor.enable_torque(id).await
             } else {
-                Err(eyre::eyre!("Servo not found"))
-            }
-        };
+                supervisor.disable_torque(id).await
+            };
 
-        match result {
-            Ok(_) => Ok(ActionResponse {
-                success: true,
-                error: None,
-            }),
-            Err(e) => Ok(ActionResponse {
-                success: false,
-                error: Some(KosError {
-                    code: ErrorCode::HardwareFailure as i32,
-                    message: e.to_string(),
-                }),
-            }),
+            return Ok(Self::to_action_response(result));
+        }
+
+        if let Some(new_actuator_id) = config.new_actuator_id {
+            let result = supervisor.change_id(id, new_actuator_id as u8).await;
+            return Ok(Self::to_action_response(result));
+        }
+
+        let mut servos = supervisor.servos.write().await;
+        if let Some(servo) = servos.get_mut(&id) {
+            // Set PID values if provided
+            let p = config.kp.map(|v| v as f32);
+            let i = config.ki.map(|v| v as f32);
+            let d = config.kd.map(|v| v as f32);
+            if p.is_some() || i.is_some() || d.is_some() {
+                let _ = servo.set_pid(p, i, d);
+            }
+
+            if let Some(zero_position) = config.zero_position {
+                if zero_position {
+                    let result = servo.set_zero_position();
+                    return Ok(Self::to_action_response(result));
+                }
+            }
+            return Ok(Self::success_response());
+        } else {
+            return Ok(Self::to_action_response(Err(eyre::eyre!("Servo not found"))));
         }
     }
 

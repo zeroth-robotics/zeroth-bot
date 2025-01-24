@@ -164,17 +164,8 @@ impl FeetechSupervisor {
 
         let supervisor_clone = supervisor.clone();
 
-        let mut info_buffer = ServoInfoBuffer {
-            retry_count: 0,
-            read_count: 0,
-            loop_count: 0,
-            fault_count: 0,
-            last_read_ms: 0,
-            servos: unsafe { std::mem::zeroed() },
-        };
-
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(5)); // 200hz
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(8)); // 125hz
             let mut stats_interval = tokio::time::interval(tokio::time::Duration::from_secs(5)); // 5 seconds
 
             // Stats tracking
@@ -190,9 +181,22 @@ impl FeetechSupervisor {
             loop {
                 tokio::select! {
                     _ = interval.tick() => {
-                        unsafe {
-                            servo_get_info(&mut info_buffer);
-                        }
+                        let mut info_buffer = ServoInfoBuffer {
+                            retry_count: 0,
+                            read_count: 0,
+                            loop_count: 0,
+                            fault_count: 0,
+                            last_read_ms: 0,
+                            servos: unsafe { std::mem::zeroed() },
+                        };
+
+                        // Move info_buffer into the blocking task and get it back
+                        let info_buffer = tokio::task::spawn_blocking(move || {
+                            unsafe { servo_get_info(&mut info_buffer); }
+                            info_buffer
+                        })
+                        .await
+                        .unwrap();
 
                         // Accumulate stats
                         accumulated_stats.retry_count += info_buffer.retry_count;
