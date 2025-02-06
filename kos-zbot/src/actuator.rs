@@ -120,6 +120,11 @@ impl Actuator for ZBotActuator {
                 let _ = servo.set_pid(p, i, d);
             }
 
+            // Set acceleration. if none is provided, default to 2230 deg/sec^2 (max).
+            //let acceleration = config.acceleration.unwrap_or(2230);
+            let default_acceleration = 2230;
+            let _ = servo.set_acceleration(default_acceleration as f32);
+
             if let Some(zero_position) = config.zero_position {
                 if zero_position {
                     let result = servo.set_zero_position();

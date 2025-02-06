@@ -21,6 +21,7 @@ enum Sts3215Register {
     TargetLocation = 0x2A,
     RunningTime = 0x2C,
     RunningSpeed = 0x2E,
+    Acceleration = 0x29,
     TorqueLimit = 0x30,
     LockMark = 0x37,
     CurrentLocation = 0x38,
@@ -125,7 +126,24 @@ impl FeetechActuator for Sts3215 {
         .map_err(|e| eyre!("Failed to set speed: {}", e))?;
         Ok(())
     }
+    
 
+    fn set_acceleration(&mut self, accel_deg_per_s2: f32) -> Result<()> { 
+        let accel_scaled = self.degrees_to_raw(accel_deg_per_s2, 0.0) as f32 / 100.0;
+        let accel_raw = accel_scaled.clamp(0.0, 254.0) as u8;    
+        debug!("Setting acceleration: {} deg/s² -> {} register units", accel_deg_per_s2, accel_raw);
+        
+        feetech_write(
+            self.id,
+            Sts3215Register::Acceleration as u8,
+            &[accel_raw],
+        )
+        .map_err(|e| eyre!("Failed to set acceleration: {}", e))?;
+        
+        Ok(())
+    }
+    
+    
     fn set_operation_mode(&mut self, mode: FeetechOperationMode) -> Result<()> {
         match mode {
             FeetechOperationMode::PositionControl => {
