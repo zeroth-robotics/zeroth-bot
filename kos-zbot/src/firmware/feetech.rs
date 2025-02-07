@@ -148,6 +148,8 @@ pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
 pub struct FeetechSupervisor {
     pub servos: Arc<RwLock<HashMap<u8, Box<dyn FeetechActuator>>>>,
     pub actuator_desired_positions: HashMap<u8, f32>,
+    //pub actuator_desired_time: HashMap<u8, f32>,
+    pub actuator_desired_velocities: HashMap<u8, f32>
 }
 
 impl FeetechSupervisor {
@@ -161,6 +163,8 @@ impl FeetechSupervisor {
         let supervisor = Self {
             servos: Arc::new(RwLock::new(HashMap::new())),
             actuator_desired_positions: HashMap::new(),
+            //actuator_desired_time: HashMap::new(),
+            actuator_desired_velocities: HashMap::new()
         };
 
         let supervisor_clone = supervisor.clone();
@@ -297,9 +301,18 @@ impl FeetechSupervisor {
         Ok(())
     }
 
-    pub async fn move_actuators(&mut self, desired_positions: &HashMap<u8, f32>) -> Result<()> {
+    //pub async fn move_actuators(&mut self, desired_positions: &HashMap<u8, f32>, desired_time: &HashMap<u8, f32>, desired_velocities: &HashMap<u8, f32>) -> Result<()> {
+    pub async fn move_actuators(&mut self, desired_positions: &HashMap<u8, f32>, desired_velocities: &HashMap<u8, f32>) -> Result<()> {
         for (id, position) in desired_positions {
             self.actuator_desired_positions.insert(*id, *position);
+        }
+
+        /*for (id, time) in desired_time {
+            self.actuator_desired_time.insert(*id, *time);
+        }*/
+
+        for (id, velocity) in desired_velocities {
+            self.actuator_desired_velocities.insert(*id, *velocity);
         }
 
         self.broadcast_command().await?;
@@ -329,6 +342,8 @@ impl FeetechSupervisor {
                 .ok_or_else(|| eyre::eyre!("Servo with id {} not found", id))?;
             servo.enable_torque()?;
             self.actuator_desired_positions.remove(&id);
+            //self.actuator_desired_time.remove(&id);
+            self.actuator_desired_velocities.remove(&id);
         } // servos lock is dropped here
         self.broadcast_command().await?;
         Ok(())
@@ -339,42 +354,64 @@ impl FeetechSupervisor {
             data_length: 0,
             data: [0; MAX_SHMEM_DATA],
         };
-
-        const SERVO_ADDR_TARGET_POSITION: u8 = 0x2A;
+    
+        const SERVO_ADDR_TARGET_POSITION: u8 = 0x2A; // Address for position & velocity
         let mut index = 0;
-
+    
+        let servos = self.servos.read().await;
+    
         // Write header
         command.data[index] = SERVO_ADDR_TARGET_POSITION;
         index += 1;
-        command.data[index] = 2; // Data length per servo (2 for position only)
+        command.data[index] = 6; // Each servo entry takes 6 bytes (Position + Time + Speed)
         index += 1;
-
-        let servos = self.servos.read().await;
-
-        // Write data for each servo
+    
         for (id, position) in &self.actuator_desired_positions {
             if let Some(servo) = servos.get(id) {
                 if servo.info().torque_enabled {
                     let position_raw = servo.degrees_to_raw(*position, 180.0);
+                    /*let time = self.actuator_desired_time.get(id).copied().unwrap_or(0.0);
+                    let time_raw: u16 = (time * 1000.0).clamp(0.0, u16::MAX as f32) as u16;
+                    let velocity = if time > 0.0 {
+                        0.0 // Set velocity to zero if time is greater than 0
+                    } else {
+                        self.actuator_desired_velocities.get(id).copied().unwrap_or(1000.0) // 1000 larger than max
+                    };*/
 
+                    let velocity = self.actuator_desired_velocities.get(id).copied().unwrap_or(1000.0); // 1000 larger than max
+                    let velocity_raw = servo.degrees_to_raw(velocity, 0.0);
+                    
+                    // Pack data
                     command.data[index] = *id;
                     index += 1;
-                    command.data[index] = (position_raw & 0xFF) as u8;
+                    command.data[index] = (position_raw & 0xFF) as u8; // Position LSB
                     index += 1;
-                    command.data[index] = ((position_raw >> 8) & 0xFF) as u8;
+                    command.data[index] = ((position_raw >> 8) & 0xFF) as u8; // Position MSB
+                    index += 1;
+                    /*command.data[index] = (time_raw & 0xFF) as u8; // Time LSB
+                    index += 1;
+                    command.data[index] =((time_raw >> 8) & 0xFF) as u8;// Time MSB
+                    index += 1;*/
+                    command.data[index] = 0x00; // Time LSB
+                    index += 1;
+                    command.data[index] = 0x00; // Time MSB
+                    index += 1;
+                    command.data[index] = (velocity_raw & 0xFF) as u8; // Velocity LSB
+                    index += 1;
+                    command.data[index] = ((velocity_raw >> 8) & 0xFF) as u8; // Velocity MSB
                     index += 1;
                 }
             }
         }
-
+    
         command.data_length = index as c_uint;
-
+    
         unsafe {
             if servo_broadcast_command(command) != 0 {
                 return Err(eyre::eyre!("Failed to broadcast command"));
             }
         }
-
+    
         Ok(())
     }
 

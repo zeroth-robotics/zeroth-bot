@@ -57,21 +57,28 @@ impl Actuator for ZBotActuator {
     async fn command_actuators(&self, commands: Vec<ActuatorCommand>) -> Result<Vec<ActionResult>> {
         let mut supervisor = self.supervisor.write().await;
         let mut desired_positions = HashMap::new();
+        let mut desired_velocities = HashMap::new();
+        //let mut desired_time = HashMap::new();
 
         let mut results = Vec::new();
+        
         for cmd in commands {
-            let result = if let Some(position) = cmd.position {
+            let result = Ok(());
+
+            if let Some(position) = cmd.position {
                 desired_positions.insert(cmd.actuator_id as u8, position as f32);
-                Ok(())
-            } else if let Some(_velocity) = cmd.velocity {
-                // Velocity control not implemented yet in the new library
-                Err(eyre::eyre!("Velocity control not implemented"))
-            } else {
-                Ok(()) // No command specified
-            };
+            }
+            
+            /*if let Some(time) = cmd.time {
+                desired_time.insert(cmd.actuator_id as u8, time as f32);
+            }*/
+
+            if let Some(velocity) = cmd.velocity {
+                desired_velocities.insert(cmd.actuator_id as u8, velocity as f32);
+            }
 
             let success = result.is_ok();
-            let error = result.err().map(|e| KosError {
+            let error = result.err().map(|e: eyre::Error| KosError {
                 code: ErrorCode::HardwareFailure as i32,
                 message: e.to_string(),
             });
@@ -84,7 +91,8 @@ impl Actuator for ZBotActuator {
         }
 
         if !desired_positions.is_empty() {
-            supervisor.move_actuators(&desired_positions).await?;
+            //supervisor.move_actuators(&desired_positions, &desired_time, &desired_velocities).await?;
+            supervisor.move_actuators(&desired_positions, &desired_velocities).await?;
         }
 
         Ok(results)
@@ -120,7 +128,7 @@ impl Actuator for ZBotActuator {
                 let _ = servo.set_pid(p, i, d);
             }
 
-            // Set acceleration. if none is provided, default to 2230 deg/sec^2 (max).
+           // Set acceleration. if none is provided, default to 2230 deg/sec^2 (max).
             //let acceleration = config.acceleration.unwrap_or(2230);
             let default_acceleration = 2230;
             let _ = servo.set_acceleration(default_acceleration as f32);
