@@ -129,7 +129,7 @@ pub trait FeetechActuator: Send + Sync + std::fmt::Debug {
     fn info(&self) -> FeetechActuatorInfo;
     fn set_position(&mut self, position_deg: f32) -> Result<()>;
     fn set_speed(&mut self, speed_deg_per_s: f32) -> Result<()>;
-    fn set_acceleration(&mut self, speed_deg_per_s2: f32) -> Result<()>;
+    fn set_acceleration(&mut self, accel_deg_per_s2: f32) -> Result<()>;
     fn enable_torque(&mut self) -> Result<()>;
     fn disable_torque(&mut self) -> Result<()>;
     fn change_id(&mut self, id: u8) -> Result<()>;
