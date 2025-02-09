@@ -8,7 +8,7 @@ use kos::kos_proto::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, trace, warn};
+use tracing::{debug};
 
 pub struct ZBotActuator {
     supervisor: Arc<RwLock<FeetechSupervisor>>,
@@ -127,6 +127,7 @@ impl Actuator for ZBotActuator {
                 }
         
                 if let Some(zero_position) = config.zero_position {
+                    debug!("zero position");
                     if zero_position {
                         if let Err(e) = servo.set_zero_position() {
                             errors.push(e.into());

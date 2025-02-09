@@ -143,7 +143,7 @@ impl FeetechActuator for Sts3215 {
         Ok(())
     }
     
-    
+  
     fn set_operation_mode(&mut self, mode: FeetechOperationMode) -> Result<()> {
         match mode {
             FeetechOperationMode::PositionControl => {
@@ -165,6 +165,7 @@ impl FeetechActuator for Sts3215 {
         self.info.torque_enabled = true;
         feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x01])
             .map_err(|e| eyre!("Failed to enable torque: {}", e))?;
+        debug!("Torque Enabled [id]: {}", self.id);
         Ok(())
     }
 
@@ -172,6 +173,7 @@ impl FeetechActuator for Sts3215 {
         self.info.torque_enabled = false;
         feetech_write(self.id, Sts3215Register::TorqueSwitch as u8, &[0x00])
             .map_err(|e| eyre!("Failed to disable torque: {}", e))?;
+        debug!("Torque Disabled [id]: {}", self.id);
         Ok(())
     }
 
