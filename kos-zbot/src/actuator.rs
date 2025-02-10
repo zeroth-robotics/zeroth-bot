@@ -118,14 +118,12 @@ impl Actuator for ZBotActuator {
                     }
                 }
 
-                // default 2230 deg/sec^2 (this should not be hardcoded)
-                // what should default be (max, off, something else?)
-                let acceleration = config.acceleration.unwrap_or(2230.0);
-                debug!("acc: {}", acceleration);
-                if let Err(e) = servo.set_acceleration(acceleration as f32) {
-                    errors.push(e.into());
+                if let Some(acceleration) = config.acceleration {
+                    if let Err(e) = servo.set_acceleration(acceleration as f32) {
+                        errors.push(e.into());
+                    }
                 }
-        
+
                 if let Some(zero_position) = config.zero_position {
                     debug!("zero position");
                     if zero_position {
