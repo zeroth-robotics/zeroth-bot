@@ -8,6 +8,7 @@ use kos::kos_proto::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{debug};
 
 pub struct ZBotActuator {
     supervisor: Arc<RwLock<FeetechSupervisor>>,
@@ -57,21 +58,28 @@ impl Actuator for ZBotActuator {
     async fn command_actuators(&self, commands: Vec<ActuatorCommand>) -> Result<Vec<ActionResult>> {
         let mut supervisor = self.supervisor.write().await;
         let mut desired_positions = HashMap::new();
+        let mut desired_velocities = HashMap::new();
+        //let mut desired_time = HashMap::new();
 
         let mut results = Vec::new();
+        
         for cmd in commands {
-            let result = if let Some(position) = cmd.position {
+            let result = Ok(());
+
+            if let Some(position) = cmd.position {
                 desired_positions.insert(cmd.actuator_id as u8, position as f32);
-                Ok(())
-            } else if let Some(_velocity) = cmd.velocity {
-                // Velocity control not implemented yet in the new library
-                Err(eyre::eyre!("Velocity control not implemented"))
-            } else {
-                Ok(()) // No command specified
-            };
+            }
+            
+            /*if let Some(time) = cmd.time {
+                desired_time.insert(cmd.actuator_id as u8, time as f32);
+            }*/
+
+            if let Some(velocity) = cmd.velocity {
+                desired_velocities.insert(cmd.actuator_id as u8, velocity as f32);
+            }
 
             let success = result.is_ok();
-            let error = result.err().map(|e| KosError {
+            let error = result.err().map(|e: eyre::Error| KosError {
                 code: ErrorCode::HardwareFailure as i32,
                 message: e.to_string(),
             });
@@ -84,7 +92,8 @@ impl Actuator for ZBotActuator {
         }
 
         if !desired_positions.is_empty() {
-            supervisor.move_actuators(&desired_positions).await?;
+            //supervisor.move_actuators(&desired_positions, &desired_time, &desired_velocities).await?;
+            supervisor.move_actuators(&desired_positions, &desired_velocities).await?;
         }
 
         Ok(results)
@@ -92,45 +101,68 @@ impl Actuator for ZBotActuator {
 
     async fn configure_actuator(&self, config: ConfigureActuatorRequest) -> Result<ActionResponse> {
         let mut supervisor = self.supervisor.write().await;
-
         let id = config.actuator_id as u8;
+        let mut errors = Vec::new();
+        debug!("configure_actuator [id]:{}", id);
+        
+        {   // <-- block to limit servo lock life
+            let mut servos = supervisor.servos.write().await;
+            if let Some(servo) = servos.get_mut(&id) {
+                // Set PID values if provided.
+                let p = config.kp.map(|v| v as f32);
+                let i = config.ki.map(|v| v as f32);
+                let d = config.kd.map(|v| v as f32);
+                if p.is_some() || i.is_some() || d.is_some() {
+                    if let Err(e) = servo.set_pid(p, i, d) {
+                        errors.push(e.into());
+                    }
+                }
 
+                if let Some(acceleration) = config.acceleration {
+                    if let Err(e) = servo.set_acceleration(acceleration as f32) {
+                        errors.push(e.into());
+                    }
+                }
+
+                if let Some(zero_position) = config.zero_position {
+                    debug!("zero position");
+                    if zero_position {
+                        if let Err(e) = servo.set_zero_position() {
+                            errors.push(e.into());
+                        }
+                    }
+                }
+            } else {
+                return Ok(Self::to_action_response(Err(eyre::eyre!("Servo not found"))));
+            }
+        } // <-- servo lock dropoed>
+    
         if let Some(torque_enabled) = config.torque_enabled {
             let result = if torque_enabled {
                 supervisor.enable_torque(id).await
             } else {
                 supervisor.disable_torque(id).await
             };
-
-            return Ok(Self::to_action_response(result));
+            if let Err(e) = result {
+                errors.push(e);
+            }
         }
-
+        
         if let Some(new_actuator_id) = config.new_actuator_id {
             let result = supervisor.change_id(id, new_actuator_id as u8).await;
-            return Ok(Self::to_action_response(result));
+            if let Err(e) = result {
+                errors.push(e);
+            }
         }
-
-        let mut servos = supervisor.servos.write().await;
-        if let Some(servo) = servos.get_mut(&id) {
-            // Set PID values if provided
-            let p = config.kp.map(|v| v as f32);
-            let i = config.ki.map(|v| v as f32);
-            let d = config.kd.map(|v| v as f32);
-            if p.is_some() || i.is_some() || d.is_some() {
-                let _ = servo.set_pid(p, i, d);
-            }
-
-            if let Some(zero_position) = config.zero_position {
-                if zero_position {
-                    let result = servo.set_zero_position();
-                    return Ok(Self::to_action_response(result));
-                }
-            }
-            return Ok(Self::success_response());
+        
+        // Return an aggregated response.
+        if errors.is_empty() {
+            Ok(Self::success_response())
         } else {
-            return Ok(Self::to_action_response(Err(eyre::eyre!("Servo not found"))));
+            Ok(Self::to_action_response(Err(errors.remove(0))))
         }
     }
+    
 
     async fn get_actuators_state(
         &self,
