@@ -10,7 +10,10 @@ pub use firmware::*;
 pub use led_matrix::*;
 pub use model::*;
 
+use crate::imu_bmi088::ZBotBMI088;
+use crate::imu_bno055::ZBotBNO055;
 use kos::{
+    hal::IMU,
     kos_proto::actuator::actuator_service_server::ActuatorServiceServer,
     kos_proto::imu::imu_service_server::ImuServiceServer,
     kos_proto::inference::inference_service_server::InferenceServiceServer,
@@ -20,13 +23,10 @@ use kos::{
         OperationsServiceImpl,
     },
     Platform, ServiceEnum,
-    hal::IMU,
 };
 use std::{future::Future, pin::Pin, sync::Arc};
 use tonic::async_trait;
 use tracing::{error, info, warn};
-use crate::imu_bno055::ZBotBNO055;
-use crate::imu_bmi088::ZBotBMI088;
 
 pub struct ZBotPlatform {}
 
@@ -74,18 +74,18 @@ impl Platform for ZBotPlatform {
             // Try BNO055 first, fall back to BMI088
             let imu = match ZBotBNO055::new("/dev/i2c-1") {
                 Ok(bno055) => {
-                    info!("Successfully initialized BNO055 ali yay ");
+                    info!("Successfully initialized BNO055");
                     Arc::new(bno055) as Arc<dyn IMU>
                 }
                 Err(e) => {
-                    warn!("BNO055 initialization failed ({}), attempting BMI088 ali hellop", e);
+                    warn!("BNO055 initialization failed ({}), attempting BMI088", e);
                     match ZBotBMI088::new("/dev/i2c-1") {
                         Ok(bmi088) => {
-                            info!("Successfully initialized BMI088 wowow ow ");
+                            info!("Successfully initialized BMI088");
                             Arc::new(bmi088) as Arc<dyn IMU>
                         }
                         Err(e) => {
-                            error!("Failed to initialize BMI088: yada yda yada {}", e);
+                            error!("Failed to initialize BMI088: {}", e);
                             return Err(e);
                         }
                     }

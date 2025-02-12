@@ -1,4 +1,4 @@
-// imu_bmi088.rs - Code for using the BMI088 IMU goes here 
+// imu_bmi088.rs - Code for using the BMI088 IMU goes here
 use async_trait::async_trait;
 use eyre::Result;
 use imu::bmi088::Bmi088Reader;
@@ -153,20 +153,3 @@ impl IMU for ZBotBMI088 {
         }
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     #[test]
-//     fn sanity_check_imu() {
-//         // Verify we can access BMI088 types and constants
-//         let accel_addr = linux_bmi088::ACCEL_ADDR;
-//         let gyro_addr = linux_bmi088::GYRO_ADDR;
-        
-//         // Create a default IMU data struct to verify the type is accessible
-//         let _data = linux_bmi088::Bmi088Data::default();
-        
-//         println!("IMU sanity check - BMI088 addresses: 0x{:02X}/0x{:02X}", accel_addr, gyro_addr);
-//     }
-// }
