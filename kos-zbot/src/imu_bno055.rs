@@ -8,35 +8,25 @@ use kos::{
     },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
-use std::sync::Arc;
 use std::time::Duration;
 use tracing::{debug, error, info};
 
-pub struct ZBotIMU {
-    imu: Arc<Bno055Reader>,
+pub struct ZBotBNO055 {
+    imu: Bno055Reader,
 }
 
-impl ZBotIMU {
+impl ZBotBNO055 {
     pub fn new(i2c_bus: &str) -> Result<Self> {
-        info!("Initializing ZerothIMU with I2C bus: {}", i2c_bus);
-
+        info!("Initializing BNO055 on bus: {}", i2c_bus);
         let imu = Bno055Reader::new(i2c_bus)?;
-
-        Ok(Self { imu: Arc::new(imu) })
-    }
-}
-
-impl Default for ZBotIMU {
-    fn default() -> Self {
-        unimplemented!("ZBotIMU cannot be default, it requires I2C bus configuration")
+        Ok(Self { imu })
     }
 }
 
 #[async_trait]
-impl IMU for ZBotIMU {
+impl IMU for ZBotBNO055 {
     async fn get_values(&self) -> Result<ImuValuesResponse> {
         let data = self.imu.get_data()?;
-
         Ok(ImuValuesResponse {
             accel_x: data.accelerometer.x as f64,
             accel_y: data.accelerometer.y as f64,
@@ -53,7 +43,6 @@ impl IMU for ZBotIMU {
 
     async fn get_advanced_values(&self) -> Result<ImuAdvancedValuesResponse> {
         let data = self.imu.get_data()?;
-
         Ok(ImuAdvancedValuesResponse {
             lin_acc_x: Some(data.linear_acceleration.x as f64),
             lin_acc_y: Some(data.linear_acceleration.y as f64),
@@ -68,7 +57,6 @@ impl IMU for ZBotIMU {
 
     async fn get_euler(&self) -> Result<EulerAnglesResponse> {
         let data = self.imu.get_data()?;
-
         Ok(EulerAnglesResponse {
             roll: data.euler.roll as f64,
             pitch: data.euler.pitch as f64,
@@ -79,7 +67,6 @@ impl IMU for ZBotIMU {
 
     async fn get_quaternion(&self) -> Result<QuaternionResponse> {
         let data = self.imu.get_data()?;
-
         Ok(QuaternionResponse {
             w: data.quaternion.w as f64,
             x: data.quaternion.x as f64,
@@ -90,11 +77,9 @@ impl IMU for ZBotIMU {
     }
 
     async fn calibrate(&self) -> Result<Operation> {
-        info!("Starting IMU calibration");
-
+        info!("Starting BNO055 calibration");
         self.imu.reset()?;
         let cal_status = self.imu.get_data()?.calibration_status;
-
         debug!(
             "Calibration Status - Sys: {}, Gyro: {}, Accel: {}, Mag: {}",
             (cal_status >> 6) & 0x03,
@@ -121,9 +106,8 @@ impl IMU for ZBotIMU {
     ) -> Result<ActionResponse> {
         match self.imu.reset() {
             Ok(_) => {
-                // Reset successful, now set mode back to NDOF
                 if let Err(e) = self.imu.set_mode(OperationMode::Ndof) {
-                    error!("Failed to set IMU mode after reset: {}", e);
+                    error!("Failed to set BNO055 mode after reset: {}", e);
                     return Ok(ActionResponse {
                         success: false,
                         error: Some(Error {
@@ -132,14 +116,13 @@ impl IMU for ZBotIMU {
                         }),
                     });
                 }
-
                 Ok(ActionResponse {
                     success: true,
                     error: None,
                 })
             }
             Err(e) => {
-                error!("Failed to zero IMU: {}", e);
+                error!("Failed to zero BNO055: {}", e);
                 Ok(ActionResponse {
                     success: false,
                     error: Some(Error {

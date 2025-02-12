@@ -1,12 +1,12 @@
 mod actuator;
 mod firmware;
-mod imu;
+mod imu_bmi088;
+mod imu_bno055;
 mod led_matrix;
 mod model;
 
 pub use actuator::*;
 pub use firmware::*;
-pub use imu::*;
 pub use led_matrix::*;
 pub use model::*;
 
@@ -20,10 +20,13 @@ use kos::{
         OperationsServiceImpl,
     },
     Platform, ServiceEnum,
+    hal::IMU,
 };
 use std::{future::Future, pin::Pin, sync::Arc};
 use tonic::async_trait;
-use tracing::error;
+use tracing::{error, info, warn};
+use crate::imu_bno055::ZBotBNO055;
+use crate::imu_bmi088::ZBotBMI088;
 
 pub struct ZBotPlatform {}
 
@@ -68,16 +71,30 @@ impl Platform for ZBotPlatform {
                 ActuatorServiceImpl::new(Arc::new(actuator)),
             ))];
 
-            match ZBotIMU::new("/dev/i2c-1") {
-                Ok(imu) => {
-                    services.push(ServiceEnum::Imu(ImuServiceServer::new(
-                        IMUServiceImpl::new(Arc::new(imu)),
-                    )));
+            // Try BNO055 first, fall back to BMI088
+            let imu = match ZBotBNO055::new("/dev/i2c-1") {
+                Ok(bno055) => {
+                    info!("Successfully initialized BNO055 ali yay ");
+                    Arc::new(bno055) as Arc<dyn IMU>
                 }
                 Err(e) => {
-                    eprintln!("Failed to initialize IMU: {}", e);
+                    warn!("BNO055 initialization failed ({}), attempting BMI088 ali hellop", e);
+                    match ZBotBMI088::new("/dev/i2c-1") {
+                        Ok(bmi088) => {
+                            info!("Successfully initialized BMI088 wowow ow ");
+                            Arc::new(bmi088) as Arc<dyn IMU>
+                        }
+                        Err(e) => {
+                            error!("Failed to initialize BMI088: yada yda yada {}", e);
+                            return Err(e);
+                        }
+                    }
                 }
-            }
+            };
+
+            services.push(ServiceEnum::Imu(ImuServiceServer::new(
+                IMUServiceImpl::new(imu),
+            )));
 
             match ZBotInference::new() {
                 Ok(inference) => {
