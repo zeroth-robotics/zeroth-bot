@@ -8,18 +8,47 @@ use kos::{
     },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
-use std::time::Duration;
-use tracing::{debug, error, info};
+use std::time::{Duration, Instant};
+use tracing::{debug, error, info, warn};
 
 pub struct ZBotBMI088 {
     imu: Bmi088Reader,
 }
 
 impl ZBotBMI088 {
+    /// Attempts to initialize the BMI088 sensor on the specified I2C bus.
+    ///
+    /// Often the Bmi088 has a "bad start", in which case it needs to be reinitialized.
+    /// If the accelerometer reading is zero after 0.1 seconds, the sensor is reinitialized.
+    /// This process is repeated until the sensor is successfully initialized or 5 seconds have elapsed.
     pub fn new(i2c_bus: &str) -> Result<Self> {
         info!("Initializing BMI088 on bus: {}", i2c_bus);
-        let imu = Bmi088Reader::new(i2c_bus)?;
-        Ok(Self { imu })
+        let overall_start = Instant::now();
+        loop {
+            // Initialize the IMU once.
+            let imu = Bmi088Reader::new(i2c_bus)?;
+            // Wait 0.1 second to let the sensor "come online"
+            std::thread::sleep(Duration::from_millis(100));
+            // Check if the accelerometer values are nonzero
+            let sample = imu.get_data()?;
+            if sample.accelerometer.x != 0.0
+                || sample.accelerometer.y != 0.0
+                || sample.accelerometer.z != 0.0
+            {
+                info!(
+                    "BMI088 accelerometer reading is non-zero; good start. Took {:?} seconds",
+                    overall_start.elapsed()
+                );
+                return Ok(Self { imu });
+            } else {
+                warn!("BMI088 accelerometer reading is zero after 0.1 seconds; reinitializing");
+            }
+
+            if overall_start.elapsed() >= Duration::from_secs(5) {
+                warn!("BMI088 failed to initialize properly after 5 seconds; giving up");
+                return Err(eyre::eyre!("BMI088 failed to initialize within 5 seconds; no non-zero acceleration reading"));
+            }
+        }
     }
 }
 
