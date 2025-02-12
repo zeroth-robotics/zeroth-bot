@@ -1,4 +1,3 @@
-// imu_bmi088.rs - Code for using the BMI088 IMU goes here
 use async_trait::async_trait;
 use eyre::Result;
 use imu::bmi088::Bmi088Reader;
