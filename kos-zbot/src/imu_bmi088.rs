@@ -16,25 +16,8 @@ pub struct ZBotBMI088 {
 }
 
 impl ZBotBMI088 {
-    fn run_sanity_check() {
-        if let Ok(()) = (|| -> Result<(), &'static str> {
-            info!("Running BMI088 sanity check...");
-            info!(
-                "IMU module loaded - BMI088 addresses: 0x{:02X}/0x{:02X}",
-                imu::bmi088::ACCEL_ADDR,
-                imu::bmi088::GYRO_ADDR
-            );
-            Ok(())
-        })() {
-            info!("BMI088 sanity check passed");
-        } else {
-            error!("BMI088 sanity check failed - continuing anyway");
-        }
-    }
-
     pub fn new(i2c_bus: &str) -> Result<Self> {
         info!("Initializing BMI088 on bus: {}", i2c_bus);
-        Self::run_sanity_check();
         let imu = Bmi088Reader::new(i2c_bus)?;
         Ok(Self { imu })
     }
