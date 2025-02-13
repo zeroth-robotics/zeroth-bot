@@ -9,14 +9,16 @@ use kos::{
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
 use nalgebra::{Matrix3, Rotation3, UnitQuaternion, Vector3};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 pub struct ZBotBMI088 {
     imu: Bmi088Reader,
-    /// The fixed correction from sensor space to robot space,
-    /// stored in single-precision.
+    /// Do fusion / correction logic in f32
     axis_correction: Rotation3<f32>,
+    /// Complementary filter for orientation estimation.
+    comp_filter: Arc<Mutex<ComplementaryFilter>>,
 }
 
 impl ZBotBMI088 {
@@ -37,7 +39,7 @@ impl ZBotBMI088 {
                 || sample.accelerometer.z != 0.0
             {
                 info!(
-                    "BMI088 accelerometer reading is non-zero; good start. Took {:?}",
+                    "BMI088 accelerometer reading is non-zero. Good start. Took {:?}",
                     overall_start.elapsed()
                 );
                 // The IMU is mounted such that:
@@ -55,9 +57,12 @@ impl ZBotBMI088 {
                     0.0_f32,
                 ));
                 debug!("Using fixed axis correction: {:?}", axis_correction);
+                // Initialize the complementary filter
+                let comp_filter = ComplementaryFilter::new(0.90);
                 return Ok(Self {
                     imu,
                     axis_correction,
+                    comp_filter: Arc::new(Mutex::new(comp_filter)),
                 });
             } else {
                 warn!("BMI088 accelerometer reading is zero after 0.1 seconds; reinitializing");
@@ -69,6 +74,83 @@ impl ZBotBMI088 {
                 ));
             }
         }
+    }
+
+    /// Helper function that reads sensor data, applies the fixed axis correction,
+    /// and updates the complementary filter. Returns the current orientation quaternion.
+    fn update_orientation(&self) -> Result<UnitQuaternion<f32>> {
+        let data = self.imu.get_data()?;
+
+        // Convert raw accelerometer data from g to m/s².
+        let raw_accel = Vector3::new(
+            data.accelerometer.x * 9.81_f32,
+            data.accelerometer.y * 9.81_f32,
+            data.accelerometer.z * 9.81_f32,
+        );
+        // Gyroscope data are in deg/s.
+        let raw_gyro = Vector3::new(data.gyroscope.x, data.gyroscope.y, data.gyroscope.z);
+        // Apply the fixed axis correction.
+        let corrected_accel = self.axis_correction * raw_accel;
+        let corrected_gyro = self.axis_correction * raw_gyro;
+
+        // Update the complementary filter with corrected gyro (in deg/s) and accel.
+        let mut filter = self.comp_filter.lock().unwrap();
+        let q = filter.update(corrected_gyro, corrected_accel);
+        Ok(q)
+    }
+}
+
+/// A simple complementary filter for estimating orientation.
+/// The filter fuses the gyroscope (high-pass) and accelerometer (low-pass) data to compute roll and pitch.
+/// Yaw is integrated from the gyro alone.
+pub struct ComplementaryFilter {
+    roll: f32,
+    pitch: f32,
+    yaw: f32,
+    last_update: Option<Instant>,
+    /// The blending coefficient; typically close to 1 (e.g., 0.98) to favor gyro integration.
+    alpha: f32,
+}
+
+impl ComplementaryFilter {
+    pub fn new(alpha: f32) -> Self {
+        Self {
+            roll: 0.0,
+            pitch: 0.0,
+            yaw: 0.0,
+            last_update: None,
+            alpha,
+        }
+    }
+
+    /// Update the filter with new measurements.
+    /// `gyro` is in deg/s and `accel` is in m/s².
+    pub fn update(&mut self, gyro: Vector3<f32>, accel: Vector3<f32>) -> UnitQuaternion<f32> {
+        let now = Instant::now();
+        // Use dt = 0.01 if this is the first update.
+        let dt = self
+            .last_update
+            .map_or(0.01, |last| now.duration_since(last).as_secs_f32());
+        self.last_update = Some(now);
+
+        // Convert gyro readings from deg/s to rad/s.
+        let gyro_rad = gyro * (std::f32::consts::PI / 180.0);
+
+        // Integrate gyro readings.
+        let roll_gyro = self.roll + gyro_rad.x * dt;
+        let pitch_gyro = self.pitch + gyro_rad.y * dt;
+        let yaw_gyro = self.yaw + gyro_rad.z * dt;
+
+        // Calculate roll and pitch from accelerometer.
+        let roll_acc = accel.y.atan2(accel.z);
+        let pitch_acc = (-accel.x).atan2((accel.y.powi(2) + accel.z.powi(2)).sqrt());
+
+        // Complementary filter blending.
+        self.roll = self.alpha * roll_gyro + (1.0 - self.alpha) * roll_acc;
+        self.pitch = self.alpha * pitch_gyro + (1.0 - self.alpha) * pitch_acc;
+        self.yaw = yaw_gyro; // Yaw: no accelerometer correction
+
+        UnitQuaternion::from_euler_angles(self.roll, self.pitch, self.yaw)
     }
 }
 
@@ -90,12 +172,12 @@ impl IMU for ZBotBMI088 {
             data.magnetometer.z,
         );
 
-        // Apply the fixed correction (all in f32).
+        // Apply the fixed correction.
         let corrected_accel = self.axis_correction * raw_accel;
         let corrected_gyro = self.axis_correction * raw_gyro;
         let corrected_mag = self.axis_correction * raw_mag;
 
-        // Convert to f64 when returning.
+        // Return the corrected sensor values in f64.
         Ok(ImuValuesResponse {
             accel_x: corrected_accel.x as f64,
             accel_y: corrected_accel.y as f64,
@@ -139,19 +221,9 @@ impl IMU for ZBotBMI088 {
     }
 
     async fn get_euler(&self) -> Result<EulerAnglesResponse> {
-        let data = self.imu.get_data()?;
-        // Build the sensor quaternion in f32.
-        let sensor_quat = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-            data.quaternion.w,
-            data.quaternion.x,
-            data.quaternion.y,
-            data.quaternion.z,
-        ));
-        // Convert our axis correction into a quaternion.
-        let correction_quat = UnitQuaternion::from_rotation_matrix(&self.axis_correction);
-        // Apply the correction.
-        let corrected_quat = correction_quat * sensor_quat;
-        let (roll, pitch, yaw) = corrected_quat.euler_angles();
+        // Update the filter using the latest sensor data and retrieve the orientation quaternion.
+        let q = self.update_orientation()?;
+        let (roll, pitch, yaw) = q.euler_angles();
         Ok(EulerAnglesResponse {
             roll: roll as f64,
             pitch: pitch as f64,
@@ -161,20 +233,12 @@ impl IMU for ZBotBMI088 {
     }
 
     async fn get_quaternion(&self) -> Result<QuaternionResponse> {
-        let data = self.imu.get_data()?;
-        let sensor_quat = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-            data.quaternion.w,
-            data.quaternion.x,
-            data.quaternion.y,
-            data.quaternion.z,
-        ));
-        let correction_quat = UnitQuaternion::from_rotation_matrix(&self.axis_correction);
-        let corrected_quat = correction_quat * sensor_quat;
+        let q = self.update_orientation()?;
         Ok(QuaternionResponse {
-            w: corrected_quat.w as f64,
-            x: corrected_quat.i as f64,
-            y: corrected_quat.j as f64,
-            z: corrected_quat.k as f64,
+            w: q.w as f64,
+            x: q.i as f64,
+            y: q.j as f64,
+            z: q.k as f64,
             error: None,
         })
     }
