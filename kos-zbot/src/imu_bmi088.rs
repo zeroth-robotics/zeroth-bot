@@ -8,11 +8,15 @@ use kos::{
     },
     kos_proto::common::{ActionResponse, Error, ErrorCode},
 };
+use nalgebra::{Matrix3, Rotation3, UnitQuaternion, Vector3};
 use std::time::{Duration, Instant};
 use tracing::{debug, error, info, warn};
 
 pub struct ZBotBMI088 {
     imu: Bmi088Reader,
+    /// The fixed correction from sensor space to robot space,
+    /// stored in single-precision.
+    axis_correction: Rotation3<f32>,
 }
 
 impl ZBotBMI088 {
@@ -25,28 +29,44 @@ impl ZBotBMI088 {
         info!("Initializing BMI088 on bus: {}", i2c_bus);
         let overall_start = Instant::now();
         loop {
-            // Initialize the IMU once.
             let imu = Bmi088Reader::new(i2c_bus)?;
-            // Wait 0.1 second to let the sensor "come online"
             std::thread::sleep(Duration::from_millis(100));
-            // Check if the accelerometer values are nonzero
             let sample = imu.get_data()?;
             if sample.accelerometer.x != 0.0
                 || sample.accelerometer.y != 0.0
                 || sample.accelerometer.z != 0.0
             {
                 info!(
-                    "BMI088 accelerometer reading is non-zero; good start. Took {:?} seconds",
+                    "BMI088 accelerometer reading is non-zero; good start. Took {:?}",
                     overall_start.elapsed()
                 );
-                return Ok(Self { imu });
+                // The IMU is mounted such that:
+                //   Sensor X: down, Sensor Y: backward, Sensor Z: left.
+                // Our robot expects:
+                //   Robot X: forward, Robot Y: left, Robot Z: up.
+                // Therefore we want:
+                //   Robot X = - (Sensor Y)
+                //   Robot Y =   (Sensor Z)
+                //   Robot Z = - (Sensor X)
+                //
+                // The corresponding rotation matrix is defined below.
+                let axis_correction = Rotation3::from_matrix(&Matrix3::new(
+                    0.0_f32, -1.0_f32, 0.0_f32, 0.0_f32, 0.0_f32, 1.0_f32, -1.0_f32, 0.0_f32,
+                    0.0_f32,
+                ));
+                debug!("Using fixed axis correction: {:?}", axis_correction);
+                return Ok(Self {
+                    imu,
+                    axis_correction,
+                });
             } else {
                 warn!("BMI088 accelerometer reading is zero after 0.1 seconds; reinitializing");
             }
-
             if overall_start.elapsed() >= Duration::from_secs(5) {
                 warn!("BMI088 failed to initialize properly after 5 seconds; giving up");
-                return Err(eyre::eyre!("BMI088 failed to initialize within 5 seconds; no non-zero acceleration reading"));
+                return Err(eyre::eyre!(
+                    "BMI088 failed to initialize within 5 seconds; no non-zero acceleration reading"
+                ));
             }
         }
     }
@@ -56,29 +76,63 @@ impl ZBotBMI088 {
 impl IMU for ZBotBMI088 {
     async fn get_values(&self) -> Result<ImuValuesResponse> {
         let data = self.imu.get_data()?;
+
+        // Build raw sensor vectors in f32.
+        let raw_accel = Vector3::new(
+            data.accelerometer.x * 9.81_f32,
+            data.accelerometer.y * 9.81_f32,
+            data.accelerometer.z * 9.81_f32,
+        );
+        let raw_gyro = Vector3::new(data.gyroscope.x, data.gyroscope.y, data.gyroscope.z);
+        let raw_mag = Vector3::new(
+            data.magnetometer.x,
+            data.magnetometer.y,
+            data.magnetometer.z,
+        );
+
+        // Apply the fixed correction (all in f32).
+        let corrected_accel = self.axis_correction * raw_accel;
+        let corrected_gyro = self.axis_correction * raw_gyro;
+        let corrected_mag = self.axis_correction * raw_mag;
+
+        // Convert to f64 when returning.
         Ok(ImuValuesResponse {
-            accel_x: (data.accelerometer.x * 9.81) as f64,
-            accel_y: (data.accelerometer.y * 9.81) as f64,
-            accel_z: (data.accelerometer.z * 9.81) as f64,
-            gyro_x: data.gyroscope.x as f64,
-            gyro_y: data.gyroscope.y as f64,
-            gyro_z: data.gyroscope.z as f64,
-            mag_x: Some(data.magnetometer.x as f64),
-            mag_y: Some(data.magnetometer.y as f64),
-            mag_z: Some(data.magnetometer.z as f64),
+            accel_x: corrected_accel.x as f64,
+            accel_y: corrected_accel.y as f64,
+            accel_z: corrected_accel.z as f64,
+            gyro_x: corrected_gyro.x as f64,
+            gyro_y: corrected_gyro.y as f64,
+            gyro_z: corrected_gyro.z as f64,
+            mag_x: Some(corrected_mag.x as f64),
+            mag_y: Some(corrected_mag.y as f64),
+            mag_z: Some(corrected_mag.z as f64),
             error: None,
         })
     }
 
     async fn get_advanced_values(&self) -> Result<ImuAdvancedValuesResponse> {
         let data = self.imu.get_data()?;
+        let raw_lin_acc = Vector3::new(
+            data.linear_acceleration.x * 9.81_f32,
+            data.linear_acceleration.y * 9.81_f32,
+            data.linear_acceleration.z * 9.81_f32,
+        );
+        let raw_grav = Vector3::new(
+            data.gravity.x * 9.81_f32,
+            data.gravity.y * 9.81_f32,
+            data.gravity.z * 9.81_f32,
+        );
+
+        let corrected_lin_acc = self.axis_correction * raw_lin_acc;
+        let corrected_grav = self.axis_correction * raw_grav;
+
         Ok(ImuAdvancedValuesResponse {
-            lin_acc_x: Some((data.linear_acceleration.x * 9.81) as f64),
-            lin_acc_y: Some((data.linear_acceleration.y * 9.81) as f64),
-            lin_acc_z: Some((data.linear_acceleration.z * 9.81) as f64),
-            grav_x: Some((data.gravity.x * 9.81) as f64),
-            grav_y: Some((data.gravity.y * 9.81) as f64),
-            grav_z: Some((data.gravity.z * 9.81) as f64),
+            lin_acc_x: Some(corrected_lin_acc.x as f64),
+            lin_acc_y: Some(corrected_lin_acc.y as f64),
+            lin_acc_z: Some(corrected_lin_acc.z as f64),
+            grav_x: Some(corrected_grav.x as f64),
+            grav_y: Some(corrected_grav.y as f64),
+            grav_z: Some(corrected_grav.z as f64),
             temp: Some(data.temperature as f64),
             error: None,
         })
@@ -86,21 +140,41 @@ impl IMU for ZBotBMI088 {
 
     async fn get_euler(&self) -> Result<EulerAnglesResponse> {
         let data = self.imu.get_data()?;
+        // Build the sensor quaternion in f32.
+        let sensor_quat = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+            data.quaternion.w,
+            data.quaternion.x,
+            data.quaternion.y,
+            data.quaternion.z,
+        ));
+        // Convert our axis correction into a quaternion.
+        let correction_quat = UnitQuaternion::from_rotation_matrix(&self.axis_correction);
+        // Apply the correction.
+        let corrected_quat = correction_quat * sensor_quat;
+        let (roll, pitch, yaw) = corrected_quat.euler_angles();
         Ok(EulerAnglesResponse {
-            roll: data.euler.roll as f64,
-            pitch: data.euler.pitch as f64,
-            yaw: data.euler.yaw as f64,
+            roll: roll as f64,
+            pitch: pitch as f64,
+            yaw: yaw as f64,
             error: None,
         })
     }
 
     async fn get_quaternion(&self) -> Result<QuaternionResponse> {
         let data = self.imu.get_data()?;
+        let sensor_quat = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
+            data.quaternion.w,
+            data.quaternion.x,
+            data.quaternion.y,
+            data.quaternion.z,
+        ));
+        let correction_quat = UnitQuaternion::from_rotation_matrix(&self.axis_correction);
+        let corrected_quat = correction_quat * sensor_quat;
         Ok(QuaternionResponse {
-            w: data.quaternion.w as f64,
-            x: data.quaternion.x as f64,
-            y: data.quaternion.y as f64,
-            z: data.quaternion.z as f64,
+            w: corrected_quat.w as f64,
+            x: corrected_quat.i as f64,
+            y: corrected_quat.j as f64,
+            z: corrected_quat.k as f64,
             error: None,
         })
     }

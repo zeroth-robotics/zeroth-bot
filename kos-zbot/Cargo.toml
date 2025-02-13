@@ -23,6 +23,7 @@ tracing-subscriber = "0.3"
 fs2 = "0.4.3"
 lazy_static = "1.5"
 uuid = { version = "1.12", features = ["v4"] }
+nalgebra = "0.33.2"
 
 [patch.crates-io]
 tonic = { git = "https://github.com/hatomist/tonic-milkv" }
