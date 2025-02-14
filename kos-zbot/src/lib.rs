@@ -1,16 +1,19 @@
 mod actuator;
 mod firmware;
-mod imu;
+mod imu_bmi088;
+mod imu_bno055;
 mod led_matrix;
 mod model;
 
 pub use actuator::*;
 pub use firmware::*;
-pub use imu::*;
 pub use led_matrix::*;
 pub use model::*;
 
+use crate::imu_bmi088::ZBotBMI088;
+use crate::imu_bno055::ZBotBNO055;
 use kos::{
+    hal::IMU,
     kos_proto::actuator::actuator_service_server::ActuatorServiceServer,
     kos_proto::imu::imu_service_server::ImuServiceServer,
     kos_proto::inference::inference_service_server::InferenceServiceServer,
@@ -23,7 +26,7 @@ use kos::{
 };
 use std::{future::Future, pin::Pin, sync::Arc};
 use tonic::async_trait;
-use tracing::error;
+use tracing::{error, info, warn};
 
 pub struct ZBotPlatform {}
 
@@ -68,15 +71,34 @@ impl Platform for ZBotPlatform {
                 ActuatorServiceImpl::new(Arc::new(actuator)),
             ))];
 
-            match ZBotIMU::new("/dev/i2c-1") {
-                Ok(imu) => {
-                    services.push(ServiceEnum::Imu(ImuServiceServer::new(
-                        IMUServiceImpl::new(Arc::new(imu)),
-                    )));
+            // Try BNO055 first, fall back to BMI088.
+            // If both fail, we log the error and continue without the IMU service.
+            let imu_service = match ZBotBNO055::new("/dev/i2c-1") {
+                Ok(bno055) => {
+                    info!("Successfully initialized BNO055");
+                    Some(Arc::new(bno055) as Arc<dyn IMU>)
                 }
                 Err(e) => {
-                    eprintln!("Failed to initialize IMU: {}", e);
+                    warn!("BNO055 initialization failed ({}), attempting BMI088", e);
+                    match ZBotBMI088::new("/dev/i2c-1") {
+                        Ok(bmi088) => {
+                            info!("Successfully initialized BMI088");
+                            Some(Arc::new(bmi088) as Arc<dyn IMU>)
+                        }
+                        Err(e) => {
+                            error!("Failed to initialize BMI088: {}", e);
+                            None
+                        }
+                    }
                 }
+            };
+
+            if let Some(imu) = imu_service {
+                services.push(ServiceEnum::Imu(ImuServiceServer::new(
+                    IMUServiceImpl::new(imu),
+                )));
+            } else {
+                error!("Failed to initialize both BNO055 and BMI088 IMUs. Continuing without IMU sensor.");
             }
 
             match ZBotInference::new() {
