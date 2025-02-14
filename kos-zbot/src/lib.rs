@@ -71,30 +71,35 @@ impl Platform for ZBotPlatform {
                 ActuatorServiceImpl::new(Arc::new(actuator)),
             ))];
 
-            // Try BNO055 first, fall back to BMI088
-            let imu = match ZBotBNO055::new("/dev/i2c-1") {
+            // Try BNO055 first, fall back to BMI088.
+            // If both fail, we log the error and continue without the IMU service.
+            let imu_service = match ZBotBNO055::new("/dev/i2c-1") {
                 Ok(bno055) => {
                     info!("Successfully initialized BNO055");
-                    Arc::new(bno055) as Arc<dyn IMU>
+                    Some(Arc::new(bno055) as Arc<dyn IMU>)
                 }
                 Err(e) => {
                     warn!("BNO055 initialization failed ({}), attempting BMI088", e);
                     match ZBotBMI088::new("/dev/i2c-1") {
                         Ok(bmi088) => {
                             info!("Successfully initialized BMI088");
-                            Arc::new(bmi088) as Arc<dyn IMU>
+                            Some(Arc::new(bmi088) as Arc<dyn IMU>)
                         }
                         Err(e) => {
                             error!("Failed to initialize BMI088: {}", e);
-                            return Err(e);
+                            None
                         }
                     }
                 }
             };
 
-            services.push(ServiceEnum::Imu(ImuServiceServer::new(
-                IMUServiceImpl::new(imu),
-            )));
+            if let Some(imu) = imu_service {
+                services.push(ServiceEnum::Imu(ImuServiceServer::new(
+                    IMUServiceImpl::new(imu),
+                )));
+            } else {
+                error!("Failed to initialize both BNO055 and BMI088 IMUs. Continuing without IMU sensor.");
+            }
 
             match ZBotInference::new() {
                 Ok(inference) => {
