@@ -8,10 +8,16 @@ use kos::kos_proto::{
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use tracing::{debug,warn};
 
 pub struct ZBotActuator {
     supervisor: Arc<RwLock<FeetechSupervisor>>,
+    command_rate: f64, // Hz
+    desired_positions: Arc<RwLock<HashMap<u8, f32>>>,
+    desired_velocities: Arc<RwLock<HashMap<u8, f32>>>,
+    command_task_running: Arc<AtomicBool>,
 }
 
 impl ZBotActuator {
@@ -19,14 +25,47 @@ impl ZBotActuator {
         let mut supervisor = FeetechSupervisor::new()?;
 
         for id in actuator_list {
-            supervisor
-                .add_servo(*id, FeetechActuatorType::Sts3215)
-                .await?;
+            supervisor.add_servo(*id, FeetechActuatorType::Sts3215).await?;
         }
 
         Ok(Self {
             supervisor: Arc::new(RwLock::new(supervisor)),
+            command_rate: 50.0, // Default 50Hz
+            desired_positions: Arc::new(RwLock::new(HashMap::new())),
+            desired_velocities: Arc::new(RwLock::new(HashMap::new())),
+            command_task_running: Arc::new(AtomicBool::new(false)),
         })
+    }
+
+    fn start_command_task(&self) {
+        if self.command_task_running.load(Ordering::SeqCst) {
+            return; // Task already running
+        }
+
+        let supervisor = self.supervisor.clone();
+        let desired_positions = self.desired_positions.clone();
+        let desired_velocities = self.desired_velocities.clone();
+        let command_task_running = self.command_task_running.clone();
+        let period = Duration::from_secs_f64(1.0 / self.command_rate);
+
+        command_task_running.store(true, Ordering::SeqCst);
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(period);
+
+            while command_task_running.load(Ordering::SeqCst) {
+                interval.tick().await;
+                
+                let positions = desired_positions.read().await.clone();
+                let velocities = desired_velocities.read().await.clone();
+
+                if !positions.is_empty() || !velocities.is_empty() {
+                    if let Err(e) = supervisor.write().await.move_actuators(&positions, &velocities).await {
+                        warn!("Failed to command actuators: {}", e);
+                    }
+                }
+            }
+        });
     }
 
     fn to_action_response<E: std::fmt::Display>(result: Result<(), E>) -> ActionResponse {
@@ -53,47 +92,44 @@ impl ZBotActuator {
     }
 }
 
+
 #[tonic::async_trait]
 impl Actuator for ZBotActuator {
     async fn command_actuators(&self, commands: Vec<ActuatorCommand>) -> Result<Vec<ActionResult>> {
-        let mut supervisor = self.supervisor.write().await;
-        let mut desired_positions = HashMap::new();
-        let mut desired_velocities = HashMap::new();
-        //let mut desired_time = HashMap::new();
-
         let mut results = Vec::new();
-        
-        for cmd in commands {
-            let result = Ok(());
+        let mut positions = self.desired_positions.write().await;
+        let mut velocities = self.desired_velocities.write().await;
 
+        for cmd in commands {
+            // Track if we should remove this actuator from continuous command
+            let mut remove_actuator = true;
+            
             if let Some(position) = cmd.position {
-                desired_positions.insert(cmd.actuator_id as u8, position as f32);
+                positions.insert(cmd.actuator_id as u8, position as f32);
+                remove_actuator = false;
             }
             
-            /*if let Some(time) = cmd.time {
-                desired_time.insert(cmd.actuator_id as u8, time as f32);
-            }*/
-
             if let Some(velocity) = cmd.velocity {
-                desired_velocities.insert(cmd.actuator_id as u8, velocity as f32);
+                velocities.insert(cmd.actuator_id as u8, velocity as f32);
+                remove_actuator = false;
             }
 
-            let success = result.is_ok();
-            let error = result.err().map(|e: eyre::Error| KosError {
-                code: ErrorCode::HardwareFailure as i32,
-                message: e.to_string(),
-            });
+            // If neither position nor velocity was specified, remove the actuator from continuous command
+            if remove_actuator {
+                positions.remove(&(cmd.actuator_id as u8));
+                velocities.remove(&(cmd.actuator_id as u8));
+            }
 
             results.push(ActionResult {
                 actuator_id: cmd.actuator_id,
-                success,
-                error,
+                success: true,
+                error: None,
             });
         }
 
-        if !desired_positions.is_empty() {
-            //supervisor.move_actuators(&desired_positions, &desired_time, &desired_velocities).await?;
-            supervisor.move_actuators(&desired_positions, &desired_velocities).await?;
+        // Start the command task if we have any positions or velocities to command
+        if !positions.is_empty() || !velocities.is_empty() {
+            self.start_command_task();
         }
 
         Ok(results)
@@ -162,7 +198,6 @@ impl Actuator for ZBotActuator {
             Ok(Self::to_action_response(Err(errors.remove(0))))
         }
     }
-    
 
     async fn get_actuators_state(
         &self,
