@@ -378,7 +378,7 @@ impl FeetechSupervisor {
                         self.actuator_desired_velocities.get(id).copied().unwrap_or(1000.0) // 1000 larger than max
                     };*/
 
-                    let velocity = self.actuator_desired_velocities.get(id).copied().unwrap_or(1000.0); // 1000 larger than max
+                    let velocity = self.actuator_desired_velocities.get(id).copied().unwrap_or(0.0); // 1000 larger than max
                     let velocity_raw = servo.degrees_to_raw(velocity, 0.0);
                     
                     // Pack data
