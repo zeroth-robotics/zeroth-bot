@@ -1,6 +1,6 @@
 [package]
 name = "kos-zbot"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Denys Bezmenov <denys@kscale.dev>", "Wesley Maa <wesley.maa@gmail.com>", "Jingxiang Mo <jx@kscale.dev>"]
 edition = "2021"
 license = "MIT"
