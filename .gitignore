@@ -1,65 +1,153 @@
-# Prerequisites
-*.d
+# .gitignore
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
+# Python
+*.py[cod]
+*$py.class
 *.pyc
-
-# Compiled Dynamic libraries
+*.pyo
+*.pyd
+__pycache__/
 *.so
-*.dylib
-*.dll
 
-# Fortran module files
-*.mod
-*.smod
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+*.manifest
+*.spec
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
+# PyInstaller
+*.manifest
+*.spec
 
-# Executables
-*.exe
-*.out
-*.app
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
 
-# vscode
-.vscode/
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
 
-# virtual environment
-venv/
+# Translations
+*.mo
+*.pot
 
-# system files
-.DS_Store
+# Django/Flask
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+instance/
+.webassets-cache
 
-# rust build files
+# Scrapy
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
 target/
 
-# build directory
-build/
+# Jupyter Notebook
+.ipynb_checkpoints
+profile_default/
+ipython_config.py
 
-# log directory
-logs/
+# IPython
+profile_default/
+ipython_config.py
 
-# artifacts
-artifacts/
-# Model artifacts directories in models/
-models/*_artifacts/
+# PDM
+.pdm.toml
+.pdm-python
+.pdm-build/
 
-# gitlab-ci-local
-.gitlab-ci-local/
+# PEP 582
+__pypackages__/
 
-# pycache
-__pycache__/
+# Celery
+celerybeat-schedule
+celerybeat.pid
 
-#dev
-ref/
+# SageMath
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Rope
+.ropeproject
+
+# mkdocs
+/site
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# Cython debug symbols
+cython_debug/
+
+# PyPI
+.pypirc
+
+# IDEs and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Databases
+*.db
+
+# Project-specific
+debug_audio/
+rollouts/
+out*/
+**/run_*/
