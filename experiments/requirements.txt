@@ -1,9 +1,0 @@
-openlch
-matplotlib
-numpy
-torch
-onnx==1.17.0
-onnxruntime==1.19.2
-onnxscript
-matplotlib
-pygame
