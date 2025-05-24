@@ -1,18 +1,6 @@
-[submodule "kos-zbot/firmware/tpu-sdk-sg200x"]
-	path = kos-zbot/firmware/tpu-sdk-sg200x
-	url = https://github.com/milkv-duo/tpu-sdk-sg200x.git
-[submodule "kos-zbot/firmware/duo-sdk"]
-	path = kos-zbot/firmware/duo-sdk
-	url = https://github.com/milkv-duo/duo-sdk.git
-[submodule "kos-zbot/models/tpu-mlir"]
-	path = kos-zbot/models/tpu-mlir
-	url = https://github.com/milkv-duo/tpu-mlir.git
-[submodule "models/tpu-mlir"]
-	path = models/tpu-mlir
-	url = https://github.com/milkv-duo/tpu-mlir.git
-[submodule "kos-zbot/tonic"]
-	path = kos-zbot/tonic
-	url = https://github.com/hyperium/tonic.git
-[submodule "buildroot"]
-	path = buildroot
-	url = https://github.com/zeroth-robotics/buildroot
+[submodule "kos-zbot"]
+	path = kos-zbot
+	url = https://github.com/kscalelabs/kos-zbot
+[submodule "ksim-gym-zbot"]
+	path = ksim-gym-zbot
+	url = https://github.com/kscalelabs/ksim-gym-zbot
